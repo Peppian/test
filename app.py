@@ -189,13 +189,13 @@ def image_to_base64(image_path):
 def main_page():
     # Load data hanya jika belum dimuat
     if 'df_mobil' not in st.session_state:
-        st.session_state.df_mobil = load_data("project_predictive/dt/mbl.csv")
-        st.session_state.df_motor = load_data("project_predictive/dt/mtr.csv")
+        st.session_state.df_mobil = load_data("dt/mbl.csv")
+        st.session_state.df_motor = load_data("dt/mtr.csv")
     
     df_mobil = st.session_state.df_mobil
     df_motor = st.session_state.df_motor
     
-    logo_path = "project_predictive/dt/logo.png"
+    logo_path = "dt/logo.png"
     img_base64 = image_to_base64(logo_path)
 
     # ------------ Sidebar ------------
