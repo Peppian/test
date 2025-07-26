@@ -167,16 +167,25 @@ def load_data(path):
 
 # ------------ Format Rupiah ------------
 def format_rupiah(val):
-    # Pastikan val adalah integer
-    if isinstance(val, str):
-        # Bersihkan string jika diperlukan
-        val = re.sub(r'[^\d]', '', val.strip())
-        if val == '':
-            val = 0
-        else:
-            val = int(val)
-    num = int(val)
-    return f"Rp {num:,}".replace(",", ".")
+    # Konversi ke float terlebih dahulu, lalu bulatkan
+    try:
+        num = float(val)
+        num = round(num)  # Bulatkan ke integer terdekat
+        return f"Rp {num:,}".replace(",", ".")
+    except:
+        return "Rp 0"
+
+# ------------ Load Data ------------
+@st.cache_data
+def load_data(path):
+    df = pd.read_csv(path)
+    df.columns = df.columns.str.strip().str.lower()
+    
+    if 'output' in df.columns:
+        # Konversi ke float dulu, lalu bulatkan
+        df['output'] = pd.to_numeric(df['output'], errors='coerce')
+        df['output'] = df['output'].apply(lambda x: round(x) if not pd.isna(x) else 0)
+    return df
 
 # ------------ Logo ke Base64 ------------
 def image_to_base64(image_path):
@@ -275,7 +284,7 @@ def main_page():
                     
                     # Tampilkan penjelasan AI
                     st.markdown("---")
-                    st.subheader("🤖 Penjelasan AI tentang Estimasi Harga")
+                    st.subheader("🤖 Penjelasan tentang Estimasi Harga")
                     
                     prompt = f"""
                         Mobil bekas dengan spesifikasi berikut:
@@ -335,7 +344,7 @@ def main_page():
                     
                     # Tampilkan penjelasan AI
                     st.markdown("---")
-                    st.subheader("🤖 Penjelasan AI tentang Estimasi Harga")
+                    st.subheader("🤖 Penjelasan tentang Estimasi Harga")
                     
                     prompt = f"""
                         Motor bekas dengan spesifikasi berikut:
