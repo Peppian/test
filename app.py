@@ -4,14 +4,11 @@ import base64
 import requests
 import re
 
-# ------------ KONFIGURASI OPENROUTER ------------
-OPENROUTER_API_KEY = "sk-or-xxxxx"  # GANTI DENGAN API KEY ANDA
-
 # ------------ KONFIGURASI LOGIN ------------
 USERNAME = "legoas"
 PASSWORD = "admin"
 
-def ask_openrouter(prompt, model="qwen/qwen3-235b-a22b-2507:free", api_key=OPENROUTER_API_KEY):
+def ask_openrouter(prompt, model= st.secrets["openrouter"]["model"], api_key= st.secrets["openrouter"]["api_key"]):
     headers = {
         "Authorization": f"Bearer {api_key}",
         "HTTP-Referer": "https://yourdomain.com",
