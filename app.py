@@ -8,11 +8,12 @@ import re
 USERNAME = "legoas"
 PASSWORD = "admin"
 
-def ask_openrouter(prompt, model= st.secrets["openrouter"]["model"], api_key= st.secrets["openrouter"]["api_key"]):
+def ask_openrouter(prompt: str) -> str:
+    api_key = st.secrets["openrouter"]["api_key"]
+    model = st.secrets["openrouter"]["model"]
+
     headers = {
         "Authorization": f"Bearer {api_key}",
-        "HTTP-Referer": "https://yourdomain.com",
-        "X-Title": "Price Explanation",
         "Content-Type": "application/json"
     }
     json_data = {
