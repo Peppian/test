@@ -9,8 +9,12 @@ USERNAME = "legoas"
 PASSWORD = "admin"
 
 def ask_openrouter(prompt: str) -> str:
-    api_key = st.secrets["openrouter"]["api_key"]
-    model = st.secrets["openrouter"]["model"]
+    """Mengirim prompt ke OpenRouter API dan mengembalikan respons."""
+    try:
+        api_key = st.secrets["openrouter"]["api_key"]
+        model = st.secrets["openrouter"]["model"]
+    except (KeyError, FileNotFoundError):
+        return "⚠️ Konfigurasi API Key OpenRouter tidak ditemukan di Streamlit Secrets."
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -19,15 +23,19 @@ def ask_openrouter(prompt: str) -> str:
     json_data = {
         "model": model,
         "messages": [
-            {"role": "system", "content": "Kamu adalah analis kendaraan profesional."},
+            {"role": "system", "content": "Anda adalah seorang analis keuangan dan pasar otomotif profesional."},
             {"role": "user", "content": prompt}
         ]
     }
-    response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=json_data)
-    if response.status_code == 200:
-        return response.json()["choices"][0]["message"]["content"]
-    else:
-        return f"⚠️ Error dari OpenRouter ({response.status_code}): {response.text}"
+    try:
+        response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=json_data, timeout=60)
+        if response.status_code == 200:
+            return response.json()["choices"][0]["message"]["content"]
+        else:
+            return f"⚠️ Error dari OpenRouter ({response.status_code}): {response.text}"
+    except requests.exceptions.RequestException as e:
+        return f"⚠️ Gagal terhubung ke OpenRouter: {e}"
+
 
 # ------------ Konfigurasi Halaman ------------
 st.set_page_config(
@@ -91,23 +99,6 @@ st.markdown("""
             color: #7f8c8d;
             font-size: 0.85rem;
         }
-        .login-input {
-            margin-bottom: 1.2rem;
-        }
-        .login-button {
-            width: 100%;
-            padding: 0.7rem;
-            border-radius: 8px;
-            font-weight: 500;
-            margin-top: 0.5rem;
-            background-color: #3498db;
-            border: none;
-            color: white;
-            transition: background-color 0.2s;
-        }
-        .login-button:hover {
-            background-color: #2980b9;
-        }
         .error-message {
             text-align: center;
             margin-top: 1rem;
@@ -154,43 +145,33 @@ def load_data(path):
     df = pd.read_csv(path)
     df.columns = df.columns.str.strip().str.lower()
     
-    # Bersihkan kolom output jika ada
-    if 'output' in df.columns:
-        # Hapus spasi dan karakter non-digit
-        df['output'] = df['output'].astype(str).apply(
-            lambda x: re.sub(r'[^\d]', '', x.strip())
-        )
-        # Konversi ke integer
-        df['output'] = pd.to_numeric(df['output'], errors='coerce').fillna(0).astype(int)
+    # Kolom yang akan dikonversi ke numerik
+    numeric_cols = ['output', 'residu', 'depresiasi_residu', 'estimasi_1']
+    
+    for col in numeric_cols:
+        if col in df.columns:
+            # Hapus karakter non-digit dan konversi ke numerik
+            # df[col] = df[col].astype(str).apply(lambda x: re.sub(r'[^\d.]', '', x.strip()))
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
     
     return df
 
 # ------------ Format Rupiah ------------
 def format_rupiah(val):
-    # Konversi ke float terlebih dahulu, lalu bulatkan
     try:
         num = float(val)
-        num = round(num)  # Bulatkan ke integer terdekat
+        num = round(num)
         return f"Rp {num:,}".replace(",", ".")
-    except:
+    except (ValueError, TypeError):
         return "Rp 0"
-
-# ------------ Load Data ------------
-@st.cache_data
-def load_data(path):
-    df = pd.read_csv(path)
-    df.columns = df.columns.str.strip().str.lower()
-    
-    if 'output' in df.columns:
-        # Konversi ke float dulu, lalu bulatkan
-        df['output'] = pd.to_numeric(df['output'], errors='coerce')
-        df['output'] = df['output'].apply(lambda x: round(x) if not pd.isna(x) else 0)
-    return df
 
 # ------------ Logo ke Base64 ------------
 def image_to_base64(image_path):
-    with open(image_path, "rb") as f:
-        return base64.b64encode(f.read()).decode()
+    try:
+        with open(image_path, "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    except FileNotFoundError:
+        return None
 
 # ------------ Halaman Utama ------------
 def main_page():
@@ -207,7 +188,10 @@ def main_page():
 
     # ------------ Sidebar ------------
     with st.sidebar:
-        st.image(f"data:image/png;base64,{img_base64}", width=140)
+        if img_base64:
+            st.image(f"data:image/png;base64,{img_base64}", width=140)
+        else:
+            st.warning("Logo tidak ditemukan.")
         st.markdown("---")
         tipe_estimasi = st.radio("Menu", ["Estimasi Mobil", "Estimasi Motor"])
         st.markdown("---")
@@ -228,43 +212,19 @@ def main_page():
             brand = st.selectbox("Brand", brand_options)
 
         with col2:
-            if brand != "-":
-                model_options = ["-"] + sorted(df_mobil[df_mobil["brand"] == brand]["model"].dropna().unique())
-            else:
-                model_options = ["-"]
+            model_options = ["-"] + (sorted(df_mobil[df_mobil["brand"] == brand]["model"].dropna().unique()) if brand != "-" else [])
             model = st.selectbox("Model", model_options)
 
         col3, col4 = st.columns(2)
         with col3:
-            if brand != "-" and model != "-":
-                type_options = ["-"] + sorted(df_mobil[(df_mobil["brand"] == brand) & (df_mobil["model"] == model)]["type"].dropna().unique())
-            else:
-                type_options = ["-"]
+            type_options = ["-"] + (sorted(df_mobil[(df_mobil["brand"] == brand) & (df_mobil["model"] == model)]["type"].dropna().unique()) if brand != "-" and model != "-" else [])
             type_ = st.selectbox("Tipe", type_options)
 
         with col4:
-            if brand != "-" and model != "-" and type_ != "-":
-                year_options = ["-"] + sorted(
-                    df_mobil[
-                        (df_mobil["brand"] == brand) &
-                        (df_mobil["model"] == model) &
-                        (df_mobil["type"] == type_)
-                    ]["year"].dropna().astype(str).unique(), reverse=True)
-            else:
-                year_options = ["-"]
+            year_options = ["-"] + (sorted(df_mobil[(df_mobil["brand"] == brand) & (df_mobil["model"] == model) & (df_mobil["type"] == type_)]["year"].dropna().astype(int).astype(str).unique(), reverse=True) if brand != "-" and model != "-" and type_ != "-" else [])
             year = st.selectbox("Tahun", year_options)
 
-        if brand != "-" and model != "-" and type_ != "-" and year != "-":
-            trans_options = ["-"] + sorted(
-                df_mobil[
-                    (df_mobil["brand"] == brand) &
-                    (df_mobil["model"] == model) &
-                    (df_mobil["type"] == type_) &
-                    (df_mobil["year"].astype(str) == year)
-                ]["transmisi"].dropna().unique()
-            )
-        else:
-            trans_options = ["-"]
+        trans_options = ["-"] + (sorted(df_mobil[(df_mobil["brand"] == brand) & (df_mobil["model"] == model) & (df_mobil["type"] == type_) & (df_mobil["year"].astype(str) == year)]["transmisi"].dropna().unique()) if brand != "-" and model != "-" and type_ != "-" and year != "-" else [])
         transmisi = st.selectbox("Transmisi", trans_options)
 
         if st.button("🔍 Lihat Estimasi Harga", use_container_width=True):
@@ -279,27 +239,46 @@ def main_page():
                     (df_mobil["transmisi"] == transmisi)
                 )
                 if mask.any():
-                    output_val = df_mobil.loc[mask, "output"].iloc[0]
-                    st.success(f"💰 Estimasi harga bekas: **{format_rupiah(output_val)}**")
+                    # --- MODIFIED START ---
+                    # Ambil seluruh baris data yang relevan, bukan hanya 'output'
+                    selected_data = df_mobil.loc[mask].iloc[0]
                     
-                    # Tampilkan penjelasan AI
+                    # Ekstrak semua nilai yang dibutuhkan
+                    output_val = selected_data.get("output", 0)
+                    residu_val = selected_data.get("residu", 0)
+                    depresiasi_val = selected_data.get("depresiasi_residu", 0)
+                    estimasi_val = selected_data.get("estimasi_1", 0)
+                    
+                    st.success(f"💰 Estimasi harga pasar: **{format_rupiah(output_val)}**")
+                    
                     st.markdown("---")
-                    st.subheader("🤖 Penjelasan tentang Estimasi Harga")
+                    st.subheader("🤖 Analisis Profesional Estimasi Harga")
                     
+                    # Buat prompt baru yang lebih detail dengan data keuangan
                     prompt = f"""
-                        Mobil bekas dengan spesifikasi berikut:
-                        • Brand           : {brand}
-                        • Model           : {model}
-                        • Tipe            : {type_}
-                        • Tahun           : {year}
-                        • Transmisi       : {transmisi}
-                        diperkirakan memiliki harga sebesar **{format_rupiah(output_val)}**. 
-                        Jelaskan secara ringkas dan profesional alasan mengapa harga tersebut masuk akal berdasarkan informasi di atas. Sertakan pertimbangan umum seperti usia kendaraan dan kondisi pasar saat ini di tahun 2025. 
-                        """
-                        
+                    Sebagai seorang analis pasar otomotif, berikan analisis harga untuk mobil bekas dengan spesifikasi berikut:
+                    - Brand: {brand}
+                    - Model: {model}
+                    - Tipe: {type_}
+                    - Tahun: {year}
+                    - Transmisi: {transmisi}
+
+                    Data keuangan internal kami menunjukkan detail berikut:
+                    - Nilai Buku (Estimasi Tahun Ini): **{format_rupiah(estimasi_val)}**
+                    - Depresiasi Tahunan: **{format_rupiah(depresiasi_val)}**
+                    - Nilai Residu (Akhir Masa Manfaat): **{format_rupiah(residu_val)}**
+                    - Estimasi Harga Pasar (Output): **{format_rupiah(output_val)}**
+
+                    Tugas Anda:
+                    Jelaskan secara profesional mengapa **Estimasi Harga Pasar ({format_rupiah(output_val)})** adalah angka yang wajar. Hubungkan penjelasan Anda dengan **Nilai Buku ({format_rupiah(estimasi_val)})**. Jelaskan bahwa Nilai Buku adalah dasar perhitungan internal berdasarkan usia dan depresiasi tahunan, sedangkan Harga Pasar juga mempertimbangkan faktor eksternal seperti sentimen pasar, popularitas model, biaya perawatan umum, dan kondisi ekonomi di tahun 2025.
+                    
+                    Buat penjelasan dalam format poin-poin yang ringkas dan mudah dipahami.
+                    """
+                    # --- MODIFIED END ---
+                    
                     with st.spinner("Menganalisis harga mobil..."):
                         ai_response = ask_openrouter(prompt)
-                        
+                    
                     st.markdown(ai_response)
                 else:
                     st.error("❌ Kombinasi tersebut tidak ditemukan di dataset.")
@@ -314,19 +293,10 @@ def main_page():
             brand = st.selectbox("Brand", brand_options, key="motor_brand")
 
         with col2:
-            if brand != "-":
-                variant_options = ["-"] + sorted(df_motor[df_motor["brand"] == brand]["variant"].dropna().unique())
-            else:
-                variant_options = ["-"]
+            variant_options = ["-"] + (sorted(df_motor[df_motor["brand"] == brand]["variant"].dropna().unique()) if brand != "-" else [])
             variant = st.selectbox("Varian", variant_options, key="motor_variant")
 
-        if brand != "-" and variant != "-":
-            year_options = ["-"] + sorted(
-                df_motor[(df_motor["brand"] == brand) & (df_motor["variant"] == variant)]["year"].dropna().astype(str).unique(),
-                reverse=True
-            )
-        else:
-            year_options = ["-"]
+        year_options = ["-"] + (sorted(df_motor[(df_motor["brand"] == brand) & (df_motor["variant"] == variant)]["year"].dropna().astype(int).astype(str).unique(), reverse=True) if brand != "-" and variant != "-" else [])
         year = st.selectbox("Tahun", year_options, key="motor_year")
 
         if st.button("🔍 Lihat Estimasi Harga", key="btn_motor", use_container_width=True):
@@ -339,25 +309,44 @@ def main_page():
                     (df_motor["year"].astype(str) == year)
                 )
                 if mask.any():
-                    output_val = df_motor.loc[mask, "output"].iloc[0]
-                    st.success(f"💰 Estimasi harga bekas: **{format_rupiah(output_val)}**")
+                    # --- MODIFIED START ---
+                    # Ambil seluruh baris data yang relevan
+                    selected_data = df_motor.loc[mask].iloc[0]
+
+                    # Ekstrak semua nilai yang dibutuhkan
+                    output_val = selected_data.get("output", 0)
+                    residu_val = selected_data.get("residu", 0)
+                    depresiasi_val = selected_data.get("depresiasi_residu", 0)
+                    estimasi_val = selected_data.get("estimasi_1", 0)
+
+                    st.success(f"💰 Estimasi harga pasar: **{format_rupiah(output_val)}**")
                     
-                    # Tampilkan penjelasan AI
                     st.markdown("---")
-                    st.subheader("🤖 Penjelasan tentang Estimasi Harga")
-                    
+                    st.subheader("🤖 Analisis Profesional Estimasi Harga")
+
+                    # Buat prompt baru yang lebih detail dengan data keuangan
                     prompt = f"""
-                        Motor bekas dengan spesifikasi berikut:
-                        • Brand           : {brand}
-                        • Varian          : {variant}
-                        • Tahun           : {year}
-                        diperkirakan memiliki harga sebesar **{format_rupiah(output_val)}**. 
-                        Jelaskan secara ringkas dan profesional alasan mengapa harga tersebut masuk akal berdasarkan informasi di atas. Sertakan pertimbangan umum seperti usia kendaraan dan kondisi pasar saat ini di tahun 2025. 
-                        """
-                        
+                    Sebagai seorang analis pasar otomotif, berikan analisis harga untuk motor bekas dengan spesifikasi berikut:
+                    - Brand: {brand}
+                    - Varian: {variant}
+                    - Tahun: {year}
+
+                    Data keuangan internal kami menunjukkan detail berikut:
+                    - Nilai Buku (Estimasi Tahun Ini): **{format_rupiah(estimasi_val)}**
+                    - Depresiasi Tahunan: **{format_rupiah(depresiasi_val)}**
+                    - Nilai Residu (Akhir Masa Manfaat): **{format_rupiah(residu_val)}**
+                    - Estimasi Harga Pasar (Output): **{format_rupiah(output_val)}**
+
+                    Tugas Anda:
+                    Jelaskan secara profesional mengapa **Estimasi Harga Pasar ({format_rupiah(output_val)})** adalah angka yang wajar. Hubungkan penjelasan Anda dengan **Nilai Buku ({format_rupiah(estimasi_val)})**. Jelaskan bahwa Nilai Buku adalah dasar perhitungan internal berdasarkan usia dan depresiasi tahunan, sedangkan Harga Pasar juga mempertimbangkan faktor eksternal seperti sentimen pasar, popularitas model, biaya perawatan umum, dan kondisi ekonomi di tahun 2025.
+                    
+                    Buat penjelasan dalam format poin-poin yang ringkas dan mudah dipahami.
+                    """
+                    # --- MODIFIED END ---
+
                     with st.spinner("Menganalisis harga motor..."):
                         ai_response = ask_openrouter(prompt)
-                        
+                    
                     st.markdown(ai_response)
                 else:
                     st.error("❌ Kombinasi tersebut tidak ditemukan di dataset.")
