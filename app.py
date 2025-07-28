@@ -267,10 +267,10 @@ def main_page():
                     - Nilai Buku (Estimasi Tahun Ini): **{format_rupiah(estimasi_val)}**
                     - Depresiasi Tahunan: **{format_rupiah(depresiasi_val)}**
                     - Nilai Residu (Akhir Masa Manfaat): **{format_rupiah(residu_val)}**
-                    - Estimasi Harga Pasar (Output): **{format_rupiah(output_val)}**
+                    - Estimasi Harga saat ini (Output): **{format_rupiah(output_val)}**
 
                     Tugas Anda:
-                    Jelaskan secara profesional mengapa **Estimasi Harga Pasar ({format_rupiah(output_val)})** adalah angka yang wajar. Hubungkan penjelasan Anda dengan **Nilai Buku ({format_rupiah(estimasi_val)})**. Jelaskan bahwa Nilai Buku adalah dasar perhitungan internal berdasarkan usia dan depresiasi tahunan, sedangkan Harga Pasar juga mempertimbangkan faktor eksternal seperti sentimen pasar, popularitas model, biaya perawatan umum, dan kondisi ekonomi di tahun 2025.
+                    Jelaskan secara profesional mengapa **Estimasi Harga saat ini ({format_rupiah(output_val)})** adalah angka yang wajar. Hubungkan penjelasan Anda dengan **Nilai Buku ({format_rupiah(estimasi_val)})**. Jelaskan bahwa Nilai Buku adalah dasar perhitungan internal berdasarkan usia dan depresiasi tahunan, sedangkan Harga Saat ini juga mempertimbangkan faktor eksternal seperti estimasi range harga pasar saat ini, sentimen pasar, popularitas model, biaya perawatan umum, dan kondisi ekonomi di tahun 2025.
                     
                     Buat penjelasan dalam format poin-poin yang ringkas dan mudah dipahami.
                     """
