@@ -201,32 +201,7 @@ def main_page():
 
     # ------------ Konten Utama ------------
     st.markdown('<div class="main-content">', unsafe_allow_html=True)
-
-    if tipe_estimasi == "Estimasi Mobil":
-        st.markdown("<h2 style='color: #2C3E50;'>Estimasi Harga Mobil Bekas</h2>", unsafe_allow_html=True)
-        st.markdown("<p style='color: #7F8C8D;'>Pilih spesifikasi mobil Anda untuk melihat estimasi harga pasarnya.</p>", unsafe_allow_html=True)
-
-        col1, col2 = st.columns(2)
-        with col1:
-            brand_options = ["-"] + sorted(df_mobil["brand"].dropna().unique())
-            brand = st.selectbox("Brand", brand_options)
-
-        with col2:
-            model_options = ["-"] + (sorted(df_mobil[df_mobil["brand"] == brand]["model"].dropna().unique()) if brand != "-" else [])
-            model = st.selectbox("Model", model_options)
-
-        col3, col4 = st.columns(2)
-        with col3:
-            type_options = ["-"] + (sorted(df_mobil[(df_mobil["brand"] == brand) & (df_mobil["model"] == model)]["type"].dropna().unique()) if brand != "-" and model != "-" else [])
-            type_ = st.selectbox("Tipe", type_options)
-
-        with col4:
-            year_options = ["-"] + (sorted(df_mobil[(df_mobil["brand"] == brand) & (df_mobil["model"] == model) & (df_mobil["type"] == type_)]["year"].dropna().astype(int).astype(str).unique(), reverse=True) if brand != "-" and model != "-" and type_ != "-" else [])
-            year = st.selectbox("Tahun", year_options)
-
-        trans_options = ["-"] + (sorted(df_mobil[(df_mobil["brand"] == brand) & (df_mobil["model"] == model) & (df_mobil["type"] == type_) & (df_mobil["year"].astype(str) == year)]["transmisi"].dropna().unique()) if brand != "-" and model != "-" and type_ != "-" and year != "-" else [])
-        transmisi = st.selectbox("Transmisi", trans_options)
-
+    
         if st.button("🔍 Lihat Estimasi Harga", use_container_width=True):
             if "-" in [brand, model, type_, year, transmisi]:
                 st.warning("⚠️ Mohon lengkapi semua pilihan terlebih dahulu.")
@@ -239,47 +214,84 @@ def main_page():
                     (df_mobil["transmisi"] == transmisi)
                 )
                 if mask.any():
-                    # --- MODIFIED START ---
-                    # Ambil seluruh baris data yang relevan, bukan hanya 'output'
                     selected_data = df_mobil.loc[mask].iloc[0]
                     
-                    # Ekstrak semua nilai yang dibutuhkan
+                    # Ekstrak nilai
                     output_val = selected_data.get("output", 0)
-                    residu_val = selected_data.get("residu", 0)
-                    depresiasi_val = selected_data.get("depresiasi_residu", 0)
-                    estimasi_val = selected_data.get("estimasi_1", 0)
+                    st.session_state['base_price'] = output_val
+                    st.session_state['grade_factor'] = 1.0  # Default grade A (100%)
                     
                     st.success(f"💰 Estimasi harga pasar: **{format_rupiah(output_val)}**")
                     
+                    # --- TAMBAHAN: Opsi Grade ---
                     st.markdown("---")
-                    st.subheader("🤖 Analisis Profesional Estimasi Harga")
+                    st.subheader("Penyesuaian Kondisi Kendaraan")
                     
-                    # Buat prompt baru yang lebih detail dengan data keuangan
-                    prompt = f"""
-                    Sebagai seorang analis pasar otomotif, berikan analisis harga untuk mobil bekas dengan spesifikasi berikut:
-                    - Brand: {brand}
-                    - Model: {model}
-                    - Tipe: {type_}
-                    - Tahun: {year}
-                    - Transmisi: {transmisi}
+                    grade_options = {
+                        "A (Sangat Baik)": 1.00,
+                        "B (Baik)": 0.94,
+                        "C (Cukup)": 0.80,
+                        "D (Kurang)": 0.58,
+                        "E (Rusak)": 0.23
+                    }
+                    
+                    selected_grade = st.selectbox(
+                        "Pilih Kondisi Kendaraan:",
+                        options=list(grade_options.keys()),
+                        index=0
+                    )
+                    
+                    # Hitung penyesuaian harga berdasarkan grade
+                    factor = grade_options[selected_grade]
+                    adjusted_price = output_val * factor
+                    st.session_state['grade_factor'] = factor
+                    st.session_state['adjusted_price'] = adjusted_price
+                    
+                    st.info(f"**Harga setelah penyesuaian ({selected_grade}): {format_rupiah(adjusted_price)}**")
+                    
+                    # --- TAMBAHAN: Tombol Generate Reason ---
+                    st.markdown("---")
+                    if st.button("🤖 Generate Reason", key="generate_reason_mobil", use_container_width=True):
+                        st.subheader("🤖 Analisis Profesional Estimasi Harga")
+                        
+                        # Ambil data tambahan untuk prompt
+                        residu_val = selected_data.get("residu", 0)
+                        depresiasi_val = selected_data.get("depresiasi_residu", 0)
+                        estimasi_val = selected_data.get("estimasi_1", 0)
+                        
+                        prompt = f"""
+                        Sebagai seorang analis pasar otomotif, berikan analisis harga untuk mobil bekas dengan spesifikasi berikut:
+                        - Brand: {brand}
+                        - Model: {model}
+                        - Tipe: {type_}
+                        - Tahun: {year}
+                        - Transmisi: {transmisi}
+                        - Kondisi: {selected_grade.split(' ')[0]}
 
-                    Data keuangan internal kami menunjukkan detail berikut:
-                    - Nilai Buku (Estimasi Tahun Ini): **{format_rupiah(estimasi_val)}**
-                    - Depresiasi Tahunan: **{format_rupiah(depresiasi_val)}**
-                    - Nilai Residu (Akhir Masa Manfaat): **{format_rupiah(residu_val)}**
-                    - Estimasi Harga saat ini (Output): **{format_rupiah(output_val)}**
+                        Data keuangan internal kami menunjukkan:
+                        - Estimasi Awal: **{format_rupiah(output_val)}**
+                        - Nilai Buku: **{format_rupiah(estimasi_val)}**
+                        - Depresiasi Tahunan: **{format_rupiah(depresiasi_val)}**
+                        - Nilai Residu: **{format_rupiah(residu_val)}**
+                        - Harga Setelah Penyesuaian Kondisi: **{format_rupiah(adjusted_price)}**
 
-                    Tugas Anda:
-                    Jelaskan secara profesional mengapa **Estimasi Harga saat ini ({format_rupiah(output_val)})** adalah angka yang wajar. Hubungkan penjelasan Anda dengan **Nilai Buku ({format_rupiah(estimasi_val)})**. Jelaskan bahwa Nilai Buku adalah dasar perhitungan internal berdasarkan usia dan depresiasi tahunan, sedangkan Harga Saat ini juga mempertimbangkan faktor eksternal seperti estimasi range harga pasar saat ini, sentimen pasar, popularitas model, biaya perawatan umum, dan kondisi ekonomi di tahun 2025.
-                    
-                    Buat penjelasan dalam format poin-poin yang ringkas dan mudah dipahami.
-                    """
-                    # --- MODIFIED END ---
-                    
-                    with st.spinner("Menganalisis harga mobil..."):
-                        ai_response = ask_openrouter(prompt)
-                    
-                    st.markdown(ai_response)
+                        Tugas Anda:
+                        1. Jelaskan mengapa estimasi awal **{format_rupiah(output_val)}** wajar
+                        2. Analisis pengaruh kondisi kendaraan ({selected_grade}) terhadap harga
+                        3. Bandingkan dengan nilai buku **{format_rupiah(estimasi_val)}**
+                        4. Berikan insight tentang prospek harga di pasar saat ini
+                        5. Sertakan faktor depresiasi tahunan dan nilai residu
+
+                        Format respon:
+                        - Gunakan poin-poin ringkas
+                        - Gunakan istilah profesional tapi mudah dimengerti
+                        - Sertakan emoji untuk poin-poin penting
+                        """
+                        
+                        with st.spinner("Menganalisis harga mobil..."):
+                            ai_response = ask_openrouter(prompt)
+                        
+                        st.markdown(ai_response)
                 else:
                     st.error("❌ Kombinasi tersebut tidak ditemukan di dataset.")
 
@@ -309,45 +321,80 @@ def main_page():
                     (df_motor["year"].astype(str) == year)
                 )
                 if mask.any():
-                    # --- MODIFIED START ---
-                    # Ambil seluruh baris data yang relevan
                     selected_data = df_motor.loc[mask].iloc[0]
-
-                    # Ekstrak semua nilai yang dibutuhkan
+                    
                     output_val = selected_data.get("output", 0)
-                    residu_val = selected_data.get("residu", 0)
-                    depresiasi_val = selected_data.get("depresiasi_residu", 0)
-                    estimasi_val = selected_data.get("estimasi_1", 0)
-
+                    st.session_state['base_price'] = output_val
+                    st.session_state['grade_factor'] = 1.0
+                    
                     st.success(f"💰 Estimasi harga pasar: **{format_rupiah(output_val)}**")
                     
+                    # --- TAMBAHAN: Opsi Grade ---
                     st.markdown("---")
-                    st.subheader("🤖 Analisis Profesional Estimasi Harga")
-
-                    # Buat prompt baru yang lebih detail dengan data keuangan
-                    prompt = f"""
-                    Sebagai seorang analis pasar otomotif, berikan analisis harga untuk motor bekas dengan spesifikasi berikut:
-                    - Brand: {brand}
-                    - Varian: {variant}
-                    - Tahun: {year}
-
-                    Data keuangan internal kami menunjukkan detail berikut:
-                    - Nilai Buku (Estimasi Tahun Ini): **{format_rupiah(estimasi_val)}**
-                    - Depresiasi Tahunan: **{format_rupiah(depresiasi_val)}**
-                    - Nilai Residu (Akhir Masa Manfaat): **{format_rupiah(residu_val)}**
-                    - Estimasi Harga Pasar (Output): **{format_rupiah(output_val)}**
-
-                    Tugas Anda:
-                    Jelaskan secara profesional mengapa **Estimasi Harga Pasar ({format_rupiah(output_val)})** adalah angka yang wajar. Hubungkan penjelasan Anda dengan **Nilai Buku ({format_rupiah(estimasi_val)})**. Jelaskan bahwa Nilai Buku adalah dasar perhitungan internal berdasarkan usia dan depresiasi tahunan, sedangkan Harga Pasar juga mempertimbangkan faktor eksternal seperti sentimen pasar, popularitas model, biaya perawatan umum, dan kondisi ekonomi di tahun 2025.
+                    st.subheader("Penyesuaian Kondisi Kendaraan")
                     
-                    Buat penjelasan dalam format poin-poin yang ringkas dan mudah dipahami.
-                    """
-                    # --- MODIFIED END ---
-
-                    with st.spinner("Menganalisis harga motor..."):
-                        ai_response = ask_openrouter(prompt)
+                    grade_options = {
+                        "A (Sangat Baik)": 1.00,
+                        "B (Baik)": 0.94,
+                        "C (Cukup)": 0.80,
+                        "D (Kurang)": 0.58,
+                        "E (Rusak)": 0.23
+                    }
                     
-                    st.markdown(ai_response)
+                    selected_grade = st.selectbox(
+                        "Pilih Kondisi Kendaraan:",
+                        options=list(grade_options.keys()),
+                        index=0,
+                        key="motor_grade"
+                    )
+                    
+                    factor = grade_options[selected_grade]
+                    adjusted_price = output_val * factor
+                    st.session_state['grade_factor'] = factor
+                    st.session_state['adjusted_price'] = adjusted_price
+                    
+                    st.info(f"**Harga setelah penyesuaian ({selected_grade}): {format_rupiah(adjusted_price)}**")
+                    
+                    # --- TAMBAHAN: Tombol Generate Reason ---
+                    st.markdown("---")
+                    if st.button("🤖 Generate Reason", key="generate_reason_motor", use_container_width=True):
+                        st.subheader("🤖 Analisis Profesional Estimasi Harga")
+                        
+                        residu_val = selected_data.get("residu", 0)
+                        depresiasi_val = selected_data.get("depresiasi_residu", 0)
+                        estimasi_val = selected_data.get("estimasi_1", 0)
+                        
+                        prompt = f"""
+                        Sebagai seorang analis pasar otomotif, berikan analisis harga untuk motor bekas dengan spesifikasi:
+                        - Brand: {brand}
+                        - Varian: {variant}
+                        - Tahun: {year}
+                        - Kondisi: {selected_grade.split(' ')[0]}
+
+                        Data keuangan internal:
+                        - Estimasi Awal: **{format_rupiah(output_val)}**
+                        - Nilai Buku: **{format_rupiah(estimasi_val)}**
+                        - Depresiasi Tahunan: **{format_rupiah(depresiasi_val)}**
+                        - Nilai Residu: **{format_rupiah(residu_val)}**
+                        - Harga Setelah Penyesuaian: **{format_rupiah(adjusted_price)}**
+
+                        Tugas Anda:
+                        1. Jelaskan kewajaran estimasi awal 
+                        2. Analisis dampak kondisi {selected_grade} terhadap harga
+                        3. Perbandingan dengan nilai buku
+                        4. Faktor pasar yang mempengaruhi harga
+                        5. Prospek nilai jual berdasarkan depresiasi
+
+                        Format:
+                        - Poin-poin ringkas dengan emoji
+                        - Bahasa profesional namun mudah dipahami
+                        - Sertakan insight spesifik untuk sepeda motor
+                        """
+                        
+                        with st.spinner("Menganalisis harga motor..."):
+                            ai_response = ask_openrouter(prompt)
+                        
+                        st.markdown(ai_response)
                 else:
                     st.error("❌ Kombinasi tersebut tidak ditemukan di dataset.")
 
