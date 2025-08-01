@@ -22,7 +22,7 @@ GRADE_FACTORS = {
 # --- ID File JSON di Google Drive ---
 # Cara mendapatkan ID: Klik kanan pada file di GDrive > Get link > Salin bagian ini:
 # https://drive.google.com/file/d/INI_ADALAH_ID_NYA/view?usp=sharing
-GOOGLE_DRIVE_FILE_ID = "GANTI_DENGAN_ID_FILE_SCHEMA_1_JSON_ANDA"
+GOOGLE_DRIVE_FILE_ID = "1unFiGov9gRo15wRSCiRs96roM5idAYob"
 
 
 # ------------ FUNGSI-FUNGSI UTAMA ------------
