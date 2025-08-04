@@ -205,15 +205,41 @@ def login_page():
         </div>
     """, unsafe_allow_html=True)
 
+# ==============================================================================
+# FUNGSI-FUNGSI HELPER (TAMBAHAN)
+# ==============================================================================
+
+# Fungsi baru untuk memuat data average
+@st.cache_data
+def load_avg_data():
+    try:
+        df = pd.read_csv("dt/avg.csv")
+        # Proses kolom tahun: ambil tahun saja dari vehicleModelDate
+        df['tahun'] = pd.to_datetime(df['vehicleModelDate'], errors='coerce').dt.year
+        df = df.dropna(subset=['tahun'])
+        df['tahun'] = df['tahun'].astype(int)
+        return df
+    except FileNotFoundError:
+        st.error("File data average tidak ditemukan di path: dt/avg.csv")
+        return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Gagal memuat data average: {e}")
+        return pd.DataFrame()
+
+# ==============================================================================
+# HALAMAN APLIKASI (MODIFIKASI)
+# ==============================================================================
+
 def main_page():
     # Load data hanya jika belum dimuat
     if 'df_mobil' not in st.session_state:
-        # --- PERUBAHAN UTAMA: Memuat data dari sumber yang berbeda ---
         st.session_state.df_mobil = load_data_from_drive(GOOGLE_DRIVE_FILE_ID)
         st.session_state.df_motor = load_local_data("dt/mtr.csv")
+        st.session_state.df_avg = load_avg_data()  # Load data average
     
     df_mobil = st.session_state.df_mobil
     df_motor = st.session_state.df_motor
+    df_avg = st.session_state.df_avg
     
     # Cek jika data mobil gagal dimuat, hentikan aplikasi
     if df_mobil.empty:
@@ -231,6 +257,17 @@ def main_page():
             st.warning("Logo tidak ditemukan di dt/logo.png.")
         st.markdown("---")
         tipe_estimasi = st.radio("Menu", ["Estimasi Mobil", "Estimasi Motor"], on_change=reset_prediction_state)
+        
+        # TAMBAHAN: Pilihan metode untuk mobil
+        if tipe_estimasi == "Estimasi Mobil":
+            metode_estimasi = st.radio(
+                "Metode Estimasi Mobil", 
+                ["System", "Average"],
+                index=0,
+                key="metode_estimasi",
+                on_change=reset_prediction_state
+            )
+        
         st.markdown("---")
         if st.button("🔒 Keluar", use_container_width=True):
             st.session_state.is_logged_in = False
@@ -241,22 +278,35 @@ def main_page():
 
     if tipe_estimasi == "Estimasi Mobil":
         st.markdown("<h2 style='color: #2C3E50;'>Estimasi Harga Mobil Bekas</h2>", unsafe_allow_html=True)
-        st.markdown("<p style='color: #7F8C8D;'>Pilih spesifikasi mobil Anda untuk melihat estimasi harga pasarnya.</p>", unsafe_allow_html=True)
+        st.markdown(f"<p style='color: #7F8C8D;'>Metode: <b>{st.session_state.get('metode_estimasi', 'System')}</b></p>", unsafe_allow_html=True)
+
+        # Tentukan sumber data berdasarkan metode
+        if st.session_state.get('metode_estimasi', 'System') == "System":
+            df_source = df_mobil
+            price_column = "output"
+        else:
+            df_source = df_avg
+            price_column = "avg_price"
+            
+            # Tampilkan peringatan jika data average kosong
+            if df_source.empty:
+                st.warning("Data average tidak tersedia. Silakan gunakan metode System.")
+                st.stop()
 
         col1, col2 = st.columns(2)
         with col1:
-            brand_options = ["-"] + sorted(df_mobil["name"].dropna().unique())
+            brand_options = ["-"] + sorted(df_source["name"].dropna().unique())
             brand = st.selectbox("Brand", brand_options, on_change=reset_prediction_state)
         with col2:
-            model_options = ["-"] + (sorted(df_mobil[df_mobil["name"] == brand]["model"].dropna().unique()) if brand != "-" else [])
+            model_options = ["-"] + (sorted(df_source[df_source["name"] == brand]["model"].dropna().unique()) if brand != "-" else [])
             model = st.selectbox("Model", model_options, on_change=reset_prediction_state)
 
         col3, col4 = st.columns(2)
         with col3:
-            varian_options = ["-"] + (sorted(df_mobil[(df_mobil["name"] == brand) & (df_mobil["model"] == model)]["varian"].dropna().unique()) if brand != "-" and model != "-" else [])
+            varian_options = ["-"] + (sorted(df_source[(df_source["name"] == brand) & (df_source["model"] == model)]["varian"].dropna().unique()) if brand != "-" and model != "-" else [])
             varian = st.selectbox("Varian", varian_options, on_change=reset_prediction_state)
         with col4:
-            year_options = ["-"] + (sorted(df_mobil[(df_mobil["name"] == brand) & (df_mobil["model"] == model) & (df_mobil["varian"] == varian)]["tahun"].dropna().astype(int).astype(str).unique(), reverse=True) if brand != "-" and model != "-" and varian != "-" else [])
+            year_options = ["-"] + (sorted(df_source[(df_source["name"] == brand) & (df_source["model"] == model) & (df_source["varian"] == varian)]["tahun"].dropna().astype(int).astype(str).unique(), reverse=True) if brand != "-" and model != "-" and varian != "-" else [])
             year = st.selectbox("Tahun", year_options, on_change=reset_prediction_state)
 
         if st.button("🔍 Lihat Estimasi Harga", use_container_width=True):
@@ -264,12 +314,15 @@ def main_page():
                 st.warning("⚠️ Mohon lengkapi semua pilihan terlebih dahulu.")
             else:
                 mask = (
-                    (df_mobil["name"] == brand) & (df_mobil["model"] == model) & 
-                    (df_mobil["varian"] == varian) & (df_mobil["tahun"].astype(str) == year)
+                    (df_source["name"] == brand) & 
+                    (df_source["model"] == model) & 
+                    (df_source["varian"] == varian) & 
+                    (df_source["tahun"].astype(str) == year)
                 )
                 if mask.any():
                     st.session_state.prediction_made_car = True
-                    st.session_state.selected_data_car = df_mobil.loc[mask].iloc[0]
+                    st.session_state.selected_data_car = df_source.loc[mask].iloc[0]
+                    st.session_state.metode_estimasi_used = st.session_state.get('metode_estimasi', 'System')  # Simpan metode yang digunakan
                     if 'ai_response_car' in st.session_state:
                          del st.session_state['ai_response_car']
                 else:
@@ -278,7 +331,13 @@ def main_page():
         
         if st.session_state.get('prediction_made_car', False):
             selected_data = st.session_state.selected_data_car
-            initial_price = selected_data.get("output", 0)
+            metode_used = st.session_state.get('metode_estimasi_used', 'System')
+            
+            # Tentukan harga awal berdasarkan metode
+            if metode_used == "System":
+                initial_price = selected_data.get("output", 0)
+            else:
+                initial_price = selected_data.get("avg_price", 0)
 
             st.markdown("---")
             st.info(f"📊 Estimasi Harga Pasar Awal: **{format_rupiah(initial_price)}**")
@@ -295,9 +354,11 @@ def main_page():
 
             if st.button("🤖 Generate Analisis Profesional", use_container_width=True):
                 with st.spinner("Menganalisis harga mobil..."):
-                    residu_val = selected_data.get("residu", 0)
-                    depresiasi_val = selected_data.get("depresiasi", 0)
-                    estimasi_val = selected_data.get("estimasi", 0)
+                    # Tentukan prompt berdasarkan metode
+                    if metode_used == "System":
+                        residu_val = selected_data.get("residu", 0)
+                        depresiasi_val = selected_data.get("depresiasi", 0)
+                        estimasi_val = selected_data.get("estimasi", 0)
 
                     prompt = f"""
                     Sebagai seorang analis pasar otomotif, berikan analisis harga untuk mobil bekas dengan spesifikasi berikut:
@@ -319,6 +380,35 @@ def main_page():
                     
                     Buat penjelasan dalam format poin-poin yang ringkas dan mudah dipahami.
                     """
+                    else:
+                        # Prompt khusus untuk metode Average
+                        prompt = f"""
+                        Sebagai seorang analis pasar otomotif, berikan analisis harga untuk mobil bekas dengan spesifikasi berikut:
+                        - Brand: {selected_data['name']}
+                        - Model: {selected_data['model']}
+                        - Varian: {selected_data['varian']}
+                        - Tahun: {int(selected_data['tahun'])}
+                        - Grade Kondisi: {grade_selection}
+                        - Metode Estimasi: Average (Rata-rata Pasar)
+
+                        Data yang digunakan adalah harga rata-rata pasar untuk kendaraan sejenis:
+                        - Rata-rata Harga Pasar: **{format_rupiah(initial_price)}**
+                        - Estimasi Harga Akhir (setelah penyesuaian Grade): **{format_rupiah(adjusted_price)}**
+
+                        Tugas Anda:
+                        Jelaskan secara profesional mengapa **Estimasi Harga Akhir ({format_rupiah(adjusted_price)})** adalah angka yang wajar. 
+                        Fokuskan analisis pada:
+                        1. Penjelasan bahwa harga berasal dari rata-rata pasar aktual
+                        2. Pengaruh penyesuaian grade terhadap harga akhir
+                        3. Faktor-faktor yang mempengaruhi harga rata-rata pasar seperti:
+                           - Permintaan pasar untuk model tersebut
+                           - Ketersediaan unit bekas
+                           - Reputasi merek dan model
+                           - Kondisi ekonomi saat ini (2025)
+                        
+                        Berikan analisis yang ringkas namun komprehensif dalam format poin-poin.
+                        """
+                    
                     ai_response = ask_openrouter(prompt)
                     st.session_state.ai_response_car = ai_response
 
@@ -429,4 +519,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
