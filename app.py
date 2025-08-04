@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import base64
 import requests
-import re
 import io
 
 # Import library yang dibutuhkan untuk Google API
@@ -15,7 +14,7 @@ from googleapiclient.http import MediaIoBaseDownload
 # KONFIGURASI APLIKASI
 # ==============================================================================
 
-# ------------ KONFIGURASI LOGIN ------------
+# ------------ KONFIGURASI LOGIN (Catatan: Untuk production, gunakan metode yang lebih aman) ------------
 USERNAME = "legoas"
 PASSWORD = "admin"
 
@@ -41,10 +40,9 @@ st.set_page_config(
     layout="wide"
 )
 
-# ------------ CSS Styling (bisa diisi dengan CSS lengkap Anda) ------------
+# ------------ CSS Styling ------------
 st.markdown("""
     <style>
-        /* Tambahkan CSS lengkap Anda di sini */
         .error-message {
             color: #E74C3C;
             font-weight: bold;
@@ -56,6 +54,20 @@ st.markdown("""
             padding: 2rem;
             border-radius: 10px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            text-align: center; /* Menambahkan perataan tengah */
+        }
+        .login-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        .login-title {
+            color: #2C3E50;
+            margin-bottom: 1.5rem;
+        }
+        .login-footer {
+            margin-top: 2rem;
+            font-size: 0.9rem;
+            color: #7F8C8D;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -142,8 +154,10 @@ def load_local_data(path):
     try:
         if path.endswith('.csv'):
             df = pd.read_csv(path)
+            # Membersihkan nama kolom untuk konsistensi
             df.columns = df.columns.str.strip().str.lower()
-            numeric_cols_csv = ['output', 'residu', 'depresiasi_residu', 'estimasi_1']
+            # Kolom yang harusnya numerik di dataset motor
+            numeric_cols_csv = ['output', 'residu', 'depresiasi_residu', 'estimasi_1', 'year']
             for col in numeric_cols_csv:
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
@@ -153,6 +167,29 @@ def load_local_data(path):
             return pd.DataFrame()
     except FileNotFoundError:
         st.error(f"File data motor tidak ditemukan di path: {path}")
+        return pd.DataFrame()
+
+# Fungsi baru untuk memuat data average
+@st.cache_data
+def load_avg_data():
+    """Memuat data average dari file CSV lokal."""
+    try:
+        df = pd.read_csv("dt/avg.csv")
+        # Proses kolom tahun: ambil tahun saja dari vehicleModelDate
+        df['tahun'] = pd.to_datetime(df['vehicleModelDate'], errors='coerce').dt.year
+        df = df.dropna(subset=['tahun'])
+        df['tahun'] = df['tahun'].astype(int)
+        
+        # Konversi kolom harga ke numerik
+        if 'avg_price' in df.columns:
+             df['avg_price'] = pd.to_numeric(df['avg_price'], errors='coerce').fillna(0)
+             
+        return df
+    except FileNotFoundError:
+        st.error("File data average tidak ditemukan di path: dt/avg.csv")
+        return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Gagal memuat data average: {e}")
         return pd.DataFrame()
 
 def format_rupiah(val):
@@ -170,7 +207,11 @@ def image_to_base64(image_path):
         return None
 
 def reset_prediction_state():
-    keys_to_reset = ['prediction_made_car', 'selected_data_car', 'ai_response_car', 'prediction_made_motor', 'selected_data_motor', 'ai_response_motor']
+    """Mereset semua state yang berhubungan dengan prediksi agar UI kembali ke awal."""
+    keys_to_reset = [
+        'prediction_made_car', 'selected_data_car', 'ai_response_car',
+        'prediction_made_motor', 'selected_data_motor', 'ai_response_motor'
+    ]
     for key in keys_to_reset:
         if key in st.session_state:
             del st.session_state[key]
@@ -180,10 +221,11 @@ def reset_prediction_state():
 # ==============================================================================
 
 def login_page():
+    # PERBAIKAN: Menambahkan class CSS yang sudah didefinisikan agar style teraplikasi
     st.markdown("""
         <div class="login-container">
             <div class="login-icon">🔒</div>
-            <h2 class="login-title">Silahkan Login Terlebih Dahulu</h2>
+            <h2 class="login-title">Silakan Login Terlebih Dahulu</h2>
     """, unsafe_allow_html=True)
     
     with st.form("login_form", clear_on_submit=False):
@@ -205,45 +247,21 @@ def login_page():
         </div>
     """, unsafe_allow_html=True)
 
-# ==============================================================================
-# FUNGSI-FUNGSI HELPER (TAMBAHAN)
-# ==============================================================================
-
-# Fungsi baru untuk memuat data average
-@st.cache_data
-def load_avg_data():
-    try:
-        df = pd.read_csv("dt/avg.csv")
-        # Proses kolom tahun: ambil tahun saja dari vehicleModelDate
-        df['tahun'] = pd.to_datetime(df['vehicleModelDate'], errors='coerce').dt.year
-        df = df.dropna(subset=['tahun'])
-        df['tahun'] = df['tahun'].astype(int)
-        return df
-    except FileNotFoundError:
-        st.error("File data average tidak ditemukan di path: dt/avg.csv")
-        return pd.DataFrame()
-    except Exception as e:
-        st.error(f"Gagal memuat data average: {e}")
-        return pd.DataFrame()
-
-# ==============================================================================
-# HALAMAN APLIKASI (MODIFIKASI)
-# ==============================================================================
 
 def main_page():
     # Load data hanya jika belum dimuat
     if 'df_mobil' not in st.session_state:
         st.session_state.df_mobil = load_data_from_drive(GOOGLE_DRIVE_FILE_ID)
         st.session_state.df_motor = load_local_data("dt/mtr.csv")
-        st.session_state.df_avg = load_avg_data()  # Load data average
-    
+        st.session_state.df_avg = load_avg_data()
+
     df_mobil = st.session_state.df_mobil
     df_motor = st.session_state.df_motor
     df_avg = st.session_state.df_avg
     
     # Cek jika data mobil gagal dimuat, hentikan aplikasi
-    if df_mobil.empty:
-        st.error("Proses tidak dapat dilanjutkan karena data utama (mobil) gagal dimuat. Periksa kembali konfigurasi Google Drive Anda.")
+    if df_mobil.empty and df_avg.empty:
+        st.error("Proses tidak dapat dilanjutkan karena data utama (mobil dan average) gagal dimuat. Periksa kembali konfigurasi Anda.")
         return
 
     logo_path = "dt/logo.png"
@@ -258,9 +276,8 @@ def main_page():
         st.markdown("---")
         tipe_estimasi = st.radio("Menu", ["Estimasi Mobil", "Estimasi Motor"], on_change=reset_prediction_state)
         
-        # TAMBAHAN: Pilihan metode untuk mobil
         if tipe_estimasi == "Estimasi Mobil":
-            metode_estimasi = st.radio(
+            st.radio(
                 "Metode Estimasi Mobil", 
                 ["System", "Average"],
                 index=0,
@@ -271,6 +288,10 @@ def main_page():
         st.markdown("---")
         if st.button("🔒 Keluar", use_container_width=True):
             st.session_state.is_logged_in = False
+            # Hapus semua state sesi agar bersih saat login kembali
+            for key in list(st.session_state.keys()):
+                if key != 'is_logged_in':
+                    del st.session_state[key]
             st.rerun()
 
     # ------------ Konten Utama ------------
@@ -278,19 +299,20 @@ def main_page():
 
     if tipe_estimasi == "Estimasi Mobil":
         st.markdown("<h2 style='color: #2C3E50;'>Estimasi Harga Mobil Bekas</h2>", unsafe_allow_html=True)
-        st.markdown(f"<p style='color: #7F8C8D;'>Metode: <b>{st.session_state.get('metode_estimasi', 'System')}</b></p>", unsafe_allow_html=True)
+        metode_aktif = st.session_state.get('metode_estimasi', 'System')
+        st.markdown(f"<p style='color: #7F8C8D;'>Metode: <b>{metode_aktif}</b></p>", unsafe_allow_html=True)
 
-        # Tentukan sumber data berdasarkan metode
-        if st.session_state.get('metode_estimasi', 'System') == "System":
+        if metode_aktif == "System":
             df_source = df_mobil
             price_column = "output"
-        else:
+            if df_source.empty:
+                st.error("Data 'System' tidak tersedia. Silakan pilih metode 'Average'.")
+                st.stop()
+        else: # Average
             df_source = df_avg
             price_column = "avg_price"
-            
-            # Tampilkan peringatan jika data average kosong
             if df_source.empty:
-                st.warning("Data average tidak tersedia. Silakan gunakan metode System.")
+                st.error("Data 'Average' tidak tersedia. Silakan pilih metode 'System'.")
                 st.stop()
 
         col1, col2 = st.columns(2)
@@ -319,13 +341,22 @@ def main_page():
                     (df_source["varian"] == varian) & 
                     (df_source["tahun"].astype(str) == year)
                 )
-                if mask.any():
+                results = df_source[mask]
+                
+                # PERBAIKAN LOGIKA: Cek jumlah hasil yang ditemukan
+                if len(results) == 1:
                     st.session_state.prediction_made_car = True
-                    st.session_state.selected_data_car = df_source.loc[mask].iloc[0]
-                    st.session_state.metode_estimasi_used = st.session_state.get('metode_estimasi', 'System')  # Simpan metode yang digunakan
+                    st.session_state.selected_data_car = results.iloc[0]
+                    st.session_state.metode_estimasi_used = metode_aktif
                     if 'ai_response_car' in st.session_state:
-                         del st.session_state['ai_response_car']
-                else:
+                        del st.session_state['ai_response_car']
+                elif len(results) > 1:
+                    st.warning(f"⚠️ Ditemukan {len(results)} data yang cocok. Hasil mungkin tidak akurat. Harap periksa kembali dataset Anda.")
+                    # Tetap tampilkan yang pertama, tapi beri peringatan
+                    st.session_state.prediction_made_car = True
+                    st.session_state.selected_data_car = results.iloc[0]
+                    st.session_state.metode_estimasi_used = metode_aktif
+                else: # len(results) == 0
                     st.error("❌ Kombinasi tersebut tidak ditemukan di dataset.")
                     reset_prediction_state()
         
@@ -333,14 +364,10 @@ def main_page():
             selected_data = st.session_state.selected_data_car
             metode_used = st.session_state.get('metode_estimasi_used', 'System')
             
-            # Tentukan harga awal berdasarkan metode
-            if metode_used == "System":
-                initial_price = selected_data.get("output", 0)
-            else:
-                initial_price = selected_data.get("avg_price", 0)
+            initial_price = selected_data.get(price_column, 0)
 
             st.markdown("---")
-            st.info(f"📊 Estimasi Harga Pasar Awal: **{format_rupiah(initial_price)}**")
+            st.info(f"📊 Estimasi Harga Pasar Awal ({metode_used}): **{format_rupiah(initial_price)}**")
             
             st.markdown("##### 📝 Pilih Grade Kondisi Kendaraan")
             grade_selection = st.selectbox(
@@ -354,34 +381,31 @@ def main_page():
 
             if st.button("🤖 Generate Analisis Profesional", use_container_width=True):
                 with st.spinner("Menganalisis harga mobil..."):
-                    # Tentukan prompt berdasarkan metode
                     if metode_used == "System":
                         residu_val = selected_data.get("residu", 0)
                         depresiasi_val = selected_data.get("depresiasi", 0)
                         estimasi_val = selected_data.get("estimasi", 0)
+                        prompt = f"""
+                        Sebagai seorang analis pasar otomotif, berikan analisis harga untuk mobil bekas dengan spesifikasi berikut:
+                        - Brand: {selected_data['name']}
+                        - Model: {selected_data['model']}
+                        - Varian: {selected_data['varian']}
+                        - Tahun: {int(selected_data['tahun'])}
+                        - Grade Kondisi: {grade_selection}
 
-                    prompt = f"""
-                    Sebagai seorang analis pasar otomotif, berikan analisis harga untuk mobil bekas dengan spesifikasi berikut:
-                    - Brand: {selected_data['name']}
-                    - Model: {selected_data['model']}
-                    - Varian: {selected_data['varian']}
-                    - Tahun: {int(selected_data['tahun'])}
-                    - Grade Kondisi: {grade_selection}
+                        Data keuangan internal kami (Metode System) menunjukkan detail berikut:
+                        - Nilai Buku (Estimasi): **{format_rupiah(estimasi_val)}**
+                        - Depresiasi Tahunan: **{format_rupiah(depresiasi_val)}**
+                        - Nilai Residu (Akhir Masa Manfaat): **{format_rupiah(residu_val)}**
+                        - Estimasi Harga Pasar Awal: **{format_rupiah(initial_price)}**
+                        - Estimasi Harga Akhir (setelah penyesuaian Grade): **{format_rupiah(adjusted_price)}**
 
-                    Data keuangan internal kami menunjukkan detail berikut:
-                    - Nilai Buku (Estimasi): **{format_rupiah(estimasi_val)}**
-                    - Depresiasi Tahunan: **{format_rupiah(depresiasi_val)}**
-                    - Nilai Residu (Akhir Masa Manfaat): **{format_rupiah(residu_val)}**
-                    - Estimasi Harga Pasar Awal: **{format_rupiah(initial_price)}**
-                    - Estimasi Harga Akhir (setelah penyesuaian Grade): **{format_rupiah(adjusted_price)}**
-
-                    Tugas Anda:
-                    Jelaskan secara profesional mengapa **Estimasi Harga Akhir ({format_rupiah(adjusted_price)})** adalah angka yang wajar. Hubungkan penjelasan Anda dengan **Estimasi Harga Pasar Awal** dan **Grade Kondisi** yang dipilih. Jelaskan bahwa Harga Awal adalah baseline pasar, dan Grade menyesuaikannya berdasarkan kondisi spesifik. Sebutkan juga faktor eksternal seperti sentimen pasar, popularitas model, dan kondisi ekonomi di tahun 2025.
-                    
-                    Buat penjelasan dalam format poin-poin yang ringkas dan mudah dipahami.
-                    """
-                    else:
-                        # Prompt khusus untuk metode Average
+                        Tugas Anda:
+                        Jelaskan secara profesional mengapa **Estimasi Harga Akhir ({format_rupiah(adjusted_price)})** adalah angka yang wajar. Hubungkan penjelasan Anda dengan **Estimasi Harga Pasar Awal** dan **Grade Kondisi** yang dipilih. Jelaskan bahwa Harga Awal adalah baseline pasar, dan Grade menyesuaikannya berdasarkan kondisi spesifik. Sebutkan juga faktor eksternal seperti sentimen pasar, popularitas model, dan kondisi ekonomi di tahun 2025.
+                        
+                        Buat penjelasan dalam format poin-poin yang ringkas dan mudah dipahami.
+                        """
+                    else: # Average
                         prompt = f"""
                         Sebagai seorang analis pasar otomotif, berikan analisis harga untuk mobil bekas dengan spesifikasi berikut:
                         - Brand: {selected_data['name']}
@@ -398,13 +422,9 @@ def main_page():
                         Tugas Anda:
                         Jelaskan secara profesional mengapa **Estimasi Harga Akhir ({format_rupiah(adjusted_price)})** adalah angka yang wajar. 
                         Fokuskan analisis pada:
-                        1. Penjelasan bahwa harga berasal dari rata-rata pasar aktual
-                        2. Pengaruh penyesuaian grade terhadap harga akhir
-                        3. Faktor-faktor yang mempengaruhi harga rata-rata pasar seperti:
-                           - Permintaan pasar untuk model tersebut
-                           - Ketersediaan unit bekas
-                           - Reputasi merek dan model
-                           - Kondisi ekonomi saat ini (2025)
+                        1. Penjelasan bahwa harga berasal dari rata-rata harga iklan pasar aktual, yang mencerminkan penawaran dan permintaan riil.
+                        2. Pengaruh penyesuaian grade terhadap harga akhir (misalnya, grade A menandakan kondisi di atas rata-rata pasar).
+                        3. Faktor-faktor yang mempengaruhi harga rata-rata pasar seperti popularitas model, ketersediaan unit, reputasi merek, dan kondisi ekonomi saat ini (2025).
                         
                         Berikan analisis yang ringkas namun komprehensif dalam format poin-poin.
                         """
@@ -444,12 +464,19 @@ def main_page():
                         (df_motor["variant"] == variant) &
                         (df_motor["year"].astype(str) == year)
                     )
-                    if mask.any():
+                    results = df_motor[mask]
+
+                    # PERBAIKAN LOGIKA: Cek jumlah hasil yang ditemukan
+                    if len(results) == 1:
                         st.session_state.prediction_made_motor = True
-                        st.session_state.selected_data_motor = df_motor.loc[mask].iloc[0]
+                        st.session_state.selected_data_motor = results.iloc[0]
                         if 'ai_response_motor' in st.session_state:
-                             del st.session_state['ai_response_motor']
-                    else:
+                            del st.session_state['ai_response_motor']
+                    elif len(results) > 1:
+                        st.warning(f"⚠️ Ditemukan {len(results)} data yang cocok. Hasil mungkin tidak akurat. Harap periksa kembali dataset Anda.")
+                        st.session_state.prediction_made_motor = True
+                        st.session_state.selected_data_motor = results.iloc[0]
+                    else: # len(results) == 0
                         st.error("❌ Kombinasi tersebut tidak ditemukan di dataset.")
                         reset_prediction_state()
             
@@ -473,6 +500,7 @@ def main_page():
 
                 if st.button("🤖 Generate Analisis Profesional", key="btn_analisis_motor", use_container_width=True):
                     with st.spinner("Menganalisis harga motor..."):
+                        # PERBAIKAN PROMPT: Menyertakan semua data keuangan yang relevan
                         residu_val = selected_data.get("residu", 0)
                         depresiasi_val = selected_data.get("depresiasi_residu", 0)
                         estimasi_val = selected_data.get("estimasi_1", 0)
@@ -486,6 +514,8 @@ def main_page():
 
                         Data keuangan internal kami menunjukkan detail berikut:
                         - Nilai Buku (Estimasi Tahun Ini): **{format_rupiah(estimasi_val)}**
+                        - Depresiasi & Residu: **{format_rupiah(depresiasi_val)}**
+                        - Nilai Residu: **{format_rupiah(residu_val)}**
                         - Estimasi Harga Pasar Awal: **{format_rupiah(initial_price)}**
                         - Estimasi Harga Akhir (setelah penyesuaian Grade): **{format_rupiah(adjusted_price)}**
 
@@ -519,5 +549,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
