@@ -170,14 +170,21 @@ def load_local_data(path):
         return pd.DataFrame()
 
 # Fungsi baru untuk memuat data average
+# VERSI BARU YANG BENAR
 @st.cache_data
 def load_avg_data():
     """Memuat data average dari file CSV lokal."""
     try:
         df = pd.read_csv("dt/avg.csv")
-        # Proses kolom tahun: ambil tahun saja dari vehicleModelDate
-        df['tahun'] = pd.to_datetime(df['vehicleModelDate'], errors='coerce').dt.year
+
+        # PERBAIKAN: Langsung gunakan kolom vehicleModelDate sebagai tahun
+        # 1. Konversi kolom 'vehicleModelDate' ke tipe numerik, paksa error menjadi NaN (Not a Number)
+        df['tahun'] = pd.to_numeric(df['vehicleModelDate'], errors='coerce')
+
+        # 2. Hapus baris di mana konversi tahun gagal (menjadi NaN)
         df = df.dropna(subset=['tahun'])
+
+        # 3. Ubah tipe data kolom 'tahun' menjadi integer (bilangan bulat)
         df['tahun'] = df['tahun'].astype(int)
         
         # Konversi kolom harga ke numerik
@@ -549,3 +556,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
