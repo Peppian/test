@@ -104,7 +104,7 @@ def ask_openrouter(prompt: str) -> str:
         return f"⚠️ Gagal terhubung ke OpenRouter: {e}"
 
 # --- FUNGSI Mengambil data dari Google Drive ---
-@st.cache_data(ttl=3600) # Cache data selama 1 jam
+@st.cache_data(ttl=3600)
 def load_data_from_drive(file_id):
     """Mengautentikasi, mengunduh, dan memuat file JSON dari Google Drive."""
     try:
@@ -129,7 +129,18 @@ def load_data_from_drive(file_id):
         file_stream.seek(0)
         
         df = pd.read_json(file_stream)
+
+        # --- LANGKAH PEMBERSIHAN DATA DITAMBAHKAN DI SINI ---
+        # Membersihkan spasi di awal/akhir dari kolom teks yang digunakan untuk filter
+        string_cols_to_clean = ['name', 'model', 'varian']
+        for col in string_cols_to_clean:
+            if col in df.columns:
+                # .astype(str) untuk memastikan semua data adalah string sebelum dibersihkan
+                # .str.strip() untuk menghapus spasi di awal dan akhir
+                df[col] = df[col].astype(str).str.strip()
+        # --- AKHIR LANGKAH PEMBERSIHAN ---
         
+        # Mengubah kolom angka dari teks menjadi angka sungguhan
         general_numeric_cols = ['output', 'residu', 'depresiasi', 'estimasi', 'tahun']
         for col in general_numeric_cols:
             if col in df.columns:
@@ -466,4 +477,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
