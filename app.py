@@ -22,7 +22,7 @@ PASSWORD = "admin"
 # --- ID File JSON di Google Drive ---
 # Cara mendapatkan ID: Klik kanan pada file di GDrive > Get link > Salin bagian ini:
 # https://drive.google.com/file/d/INI_ADALAH_ID_NYA/view?usp=sharing
-GOOGLE_DRIVE_FILE_ID = "1kupvip6lXR3Q0QGolkGzUu_jOPj7-13Z"
+GOOGLE_DRIVE_FILE_ID = "1t41znrid0K9KJf393dFYsZ2sV15hNhcI"
 
 
 # --- Kamus untuk faktor Grade ---
@@ -429,6 +429,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
