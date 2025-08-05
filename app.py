@@ -106,7 +106,7 @@ def ask_openrouter(prompt: str) -> str:
 # --- FUNGSI Mengambil data dari Google Drive ---
 @st.cache_data(ttl=3600)
 def load_data_from_drive(file_id):
-    """Mengautentikasi, mengunduh, dan memuat file JSON dari Google Drive."""
+    """Mengautentikasi, mengunduh, dan memuat file JSON dari Google Drive dengan pembersihan data."""
     try:
         creds_info = st.secrets["gcp_service_account"]
         creds = Credentials.from_service_account_info(creds_info)
@@ -130,19 +130,20 @@ def load_data_from_drive(file_id):
         
         df = pd.read_json(file_stream)
 
-        # --- LANGKAH PEMBERSIHAN DATA DITAMBAHKAN DI SINI ---
-        # Membersihkan spasi di awal/akhir dari kolom teks yang digunakan untuk filter
+        # 1. Membersihkan spasi di awal/akhir dari kolom teks yang digunakan untuk filter.
+        # Ini adalah langkah kunci untuk mengatasi error "Kombinasi tidak ditemukan".
         string_cols_to_clean = ['name', 'model', 'varian']
         for col in string_cols_to_clean:
             if col in df.columns:
-                # .astype(str) untuk memastikan semua data adalah string sebelum dibersihkan
-                # .str.strip() untuk menghapus spasi di awal dan akhir
                 df[col] = df[col].astype(str).str.strip()
-        # --- AKHIR LANGKAH PEMBERSIHAN ---
         
-        # Mengubah kolom angka dari teks menjadi angka sungguhan
-        general_numeric_cols = ['output', 'residu', 'depresiasi', 'estimasi', 'tahun']
-        for col in general_numeric_cols:
+        # 2. Mengubah semua kolom yang seharusnya angka menjadi tipe data numerik.
+        numeric_cols = [
+            'tahun', 'harga_terendah', 'harga_baru', 'residu', 'depresiasi', 
+            'estimasi', 'depresiasi_2', 'estimasi_2', 'estimasi_3', 
+            'avg_estimasi', 'estimator', 'output'
+        ]
+        for col in numeric_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
@@ -156,11 +157,19 @@ def load_data_from_drive(file_id):
 # --- Fungsi load_data untuk file lokal (motor) ---
 @st.cache_data
 def load_local_data(path):
-    """Memuat data dari file lokal (khusus untuk data motor)."""
+    """Memuat data dari file lokal (khusus untuk data motor) dengan pembersihan data."""
     try:
         if path.endswith('.csv'):
             df = pd.read_csv(path)
             df.columns = df.columns.str.strip().str.lower()
+            
+            # Membersihkan spasi pada kolom teks
+            string_cols_motor = ['brand', 'variant']
+            for col in string_cols_motor:
+                if col in df.columns:
+                    df[col] = df[col].astype(str).str.strip()
+
+            # Mengubah kolom angka
             numeric_cols_csv = ['output', 'residu', 'depresiasi_residu', 'estimasi_1', 'year']
             for col in numeric_cols_csv:
                 if col in df.columns:
@@ -188,6 +197,7 @@ def image_to_base64(image_path):
         return None
 
 def reset_prediction_state():
+    """Mereset semua state prediksi agar UI kembali ke awal saat pilihan berubah."""
     keys_to_reset = [
         'prediction_made_car', 'selected_data_car', 'ai_response_car',
         'prediction_made_motor', 'selected_data_motor', 'ai_response_motor'
@@ -207,7 +217,7 @@ def login_page():
             <h2 class="login-title">Silakan Login Terlebih Dahulu</h2>
     """, unsafe_allow_html=True)
     
-    with st.form("login_form", clear_on_submit=False):
+    with st.form("login_form"):
         username = st.text_input("Username", key="username", placeholder="Masukkan username Anda")
         password = st.text_input("Password", key="password", type="password", placeholder="Masukkan password Anda")
         submit_button = st.form_submit_button("Masuk", use_container_width=True)
@@ -228,7 +238,7 @@ def login_page():
 
 
 def main_page():
-    # Hanya memuat data mobil (Google Drive) dan motor (lokal)
+    # Memuat data sekali per sesi
     if 'df_mobil' not in st.session_state:
         st.session_state.df_mobil = load_data_from_drive(GOOGLE_DRIVE_FILE_ID)
         st.session_state.df_motor = load_local_data("dt/mtr.csv")
@@ -236,7 +246,6 @@ def main_page():
     df_mobil = st.session_state.df_mobil
     df_motor = st.session_state.df_motor
     
-    # Kondisi error disederhanakan
     if df_mobil.empty:
         st.error("Proses tidak dapat dilanjutkan karena data mobil dari Google Drive gagal dimuat.")
         return
@@ -250,7 +259,6 @@ def main_page():
         else:
             st.warning("Logo tidak ditemukan di dt/logo.png.")
         st.markdown("---")
-        # Pilihan metode estimasi dihapus
         tipe_estimasi = st.radio("Menu", ["Estimasi Mobil", "Estimasi Motor"], on_change=reset_prediction_state)
         
         st.markdown("---")
@@ -263,17 +271,13 @@ def main_page():
 
     st.markdown('<div class="main-content">', unsafe_allow_html=True)
 
+    # --- BAGIAN ESTIMASI MOBIL ---
     if tipe_estimasi == "Estimasi Mobil":
         st.markdown("<h2 style='color: #2C3E50;'>Estimasi Harga Mobil Bekas</h2>", unsafe_allow_html=True)
         
-        # Logika disederhanakan, hanya menggunakan satu sumber data
         df_source = df_mobil
         price_column = "output"
         
-        if df_source.empty:
-            st.error("Data mobil dari Google Drive tidak dapat dimuat. Fitur ini tidak tersedia.")
-            st.stop()
-
         col1, col2 = st.columns(2)
         with col1:
             brand_options = ["-"] + sorted(df_source["name"].dropna().unique())
@@ -287,6 +291,7 @@ def main_page():
             varian_options = ["-"] + (sorted(df_source[(df_source["name"] == brand) & (df_source["model"] == model)]["varian"].dropna().unique()) if brand != "-" and model != "-" else [])
             varian = st.selectbox("Varian", varian_options, on_change=reset_prediction_state)
         with col4:
+            # Tahun sudah dipastikan numerik saat loading data
             year_options = ["-"] + (sorted(df_source[(df_source["name"] == brand) & (df_source["model"] == model) & (df_source["varian"] == varian)]["tahun"].dropna().astype(int).astype(str).unique(), reverse=True) if brand != "-" and model != "-" and varian != "-" else [])
             year = st.selectbox("Tahun", year_options, on_change=reset_prediction_state)
 
@@ -294,6 +299,8 @@ def main_page():
             if "-" in [brand, model, varian, year]:
                 st.warning("⚠️ Mohon lengkapi semua pilihan terlebih dahulu.")
             else:
+                # Filter data berdasarkan pilihan pengguna
+                # Harusnya berhasil karena data sudah dibersihkan saat loading
                 mask = (
                     (df_source["name"] == brand) & 
                     (df_source["model"] == model) & 
@@ -302,15 +309,14 @@ def main_page():
                 )
                 results = df_source[mask]
                 
-                if len(results) == 1:
+                if not results.empty:
                     st.session_state.prediction_made_car = True
+                    # Jika ada lebih dari 1 hasil, ambil yang pertama dan beri peringatan
+                    if len(results) > 1:
+                         st.warning(f"⚠️ Ditemukan {len(results)} data duplikat. Menampilkan hasil pertama.")
                     st.session_state.selected_data_car = results.iloc[0]
                     if 'ai_response_car' in st.session_state:
                         del st.session_state['ai_response_car']
-                elif len(results) > 1:
-                    st.warning(f"⚠️ Ditemukan {len(results)} data yang cocok. Hasil mungkin tidak akurat. Harap periksa kembali dataset Anda.")
-                    st.session_state.prediction_made_car = True
-                    st.session_state.selected_data_car = results.iloc[0]
                 else:
                     st.error("❌ Kombinasi tersebut tidak ditemukan di dataset.")
                     reset_prediction_state()
@@ -334,7 +340,6 @@ def main_page():
 
             if st.button("🤖 Generate Analisis Profesional", use_container_width=True):
                 with st.spinner("Menganalisis harga mobil..."):
-                    # Hanya ada satu prompt sekarang, tidak perlu if/else
                     residu_val = selected_data.get("residu", 0)
                     depresiasi_val = selected_data.get("depresiasi", 0)
                     estimasi_val = selected_data.get("estimasi", 0)
@@ -347,14 +352,14 @@ def main_page():
                     - Grade Kondisi: {grade_selection}
 
                     Data keuangan internal kami menunjukkan detail berikut:
-                    - Nilai Buku (Estimasi): **{format_rupiah(estimasi_val)}**
-                    - Depresiasi Tahunan: **{format_rupiah(depresiasi_val)}**
-                    - Nilai Residu (Akhir Masa Manfaat): **{format_rupiah(residu_val)}**
-                    - Estimasi Harga Pasar Awal: **{format_rupiah(initial_price)}**
-                    - Estimasi Harga Akhir (setelah penyesuaian Grade): **{format_rupiah(adjusted_price)}**
+                    - Nilai Buku (Estimasi): {format_rupiah(estimasi_val)}
+                    - Depresiasi Tahunan: {format_rupiah(depresiasi_val)}
+                    - Nilai Residu (Akhir Masa Manfaat): {format_rupiah(residu_val)}
+                    - Estimasi Harga Pasar Awal: {format_rupiah(initial_price)}
+                    - Estimasi Harga Akhir (setelah penyesuaian Grade): {format_rupiah(adjusted_price)}
 
                     Tugas Anda:
-                    Jelaskan secara profesional mengapa **Estimasi Harga Akhir ({format_rupiah(adjusted_price)})** adalah angka yang wajar. Hubungkan penjelasan Anda dengan **Estimasi Harga Pasar Awal** dan **Grade Kondisi** yang dipilih. Jelaskan bahwa Harga Awal adalah baseline pasar, dan Grade menyesuaikannya berdasarkan kondisi spesifik. Sebutkan juga faktor eksternal seperti sentimen pasar, popularitas model, dan kondisi ekonomi di tahun 2025.
+                    Jelaskan secara profesional mengapa Estimasi Harga Akhir ({format_rupiah(adjusted_price)}) adalah angka yang wajar. Hubungkan penjelasan Anda dengan Estimasi Harga Pasar Awal dan Grade Kondisi yang dipilih. Jelaskan bahwa Harga Awal adalah baseline pasar, dan Grade menyesuaikannya berdasarkan kondisi spesifik. Sebutkan juga faktor eksternal seperti sentimen pasar, popularitas model, dan kondisi ekonomi di tahun {pd.Timestamp.now().year + 1}.
                     
                     Buat penjelasan dalam format poin-poin yang ringkas dan mudah dipahami.
                     """
@@ -367,9 +372,9 @@ def main_page():
                 st.subheader("🤖 Analisis Profesional Estimasi Harga")
                 st.markdown(st.session_state.ai_response_car)
 
+    # --- BAGIAN ESTIMASI MOTOR ---
     elif tipe_estimasi == "Estimasi Motor":
         st.markdown("<h2 style='color: #2C3E50;'>Estimasi Harga Motor Bekas</h2>", unsafe_allow_html=True)
-        st.markdown("<p style='color: #7F8C8D;'>Pilih spesifikasi motor Anda untuk melihat estimasi harga pasarnya.</p>", unsafe_allow_html=True)
         
         if df_motor.empty:
             st.warning("Data motor tidak dapat dimuat. Fitur ini tidak tersedia.")
@@ -396,15 +401,13 @@ def main_page():
                     )
                     results = df_motor[mask]
 
-                    if len(results) == 1:
+                    if not results.empty:
                         st.session_state.prediction_made_motor = True
+                        if len(results) > 1:
+                            st.warning(f"⚠️ Ditemukan {len(results)} data duplikat. Menampilkan hasil pertama.")
                         st.session_state.selected_data_motor = results.iloc[0]
                         if 'ai_response_motor' in st.session_state:
                             del st.session_state['ai_response_motor']
-                    elif len(results) > 1:
-                        st.warning(f"⚠️ Ditemukan {len(results)} data yang cocok. Hasil mungkin tidak akurat. Harap periksa kembali dataset Anda.")
-                        st.session_state.prediction_made_motor = True
-                        st.session_state.selected_data_motor = results.iloc[0]
                     else:
                         st.error("❌ Kombinasi tersebut tidak ditemukan di dataset.")
                         reset_prediction_state()
@@ -441,14 +444,14 @@ def main_page():
                         - Grade Kondisi: {grade_selection}
 
                         Data keuangan internal kami menunjukkan detail berikut:
-                        - Nilai Buku (Estimasi Tahun Ini): **{format_rupiah(estimasi_val)}**
-                        - Depresiasi & Residu: **{format_rupiah(depresiasi_val)}**
-                        - Nilai Residu: **{format_rupiah(residu_val)}**
-                        - Estimasi Harga Pasar Awal: **{format_rupiah(initial_price)}**
-                        - Estimasi Harga Akhir (setelah penyesuaian Grade): **{format_rupiah(adjusted_price)}**
+                        - Nilai Buku (Estimasi Tahun Ini): {format_rupiah(estimasi_val)}
+                        - Depresiasi & Residu: {format_rupiah(depresiasi_val)}
+                        - Nilai Residu: {format_rupiah(residu_val)}
+                        - Estimasi Harga Pasar Awal: {format_rupiah(initial_price)}
+                        - Estimasi Harga Akhir (setelah penyesuaian Grade): {format_rupiah(adjusted_price)}
 
                         Tugas Anda:
-                        Jelaskan secara profesional mengapa **Estimasi Harga Akhir ({format_rupiah(adjusted_price)})** adalah angka yang wajar. Hubungkan penjelasan Anda dengan **Estimasi Harga Pasar Awal** dan **Grade Kondisi** yang dipilih. Jelaskan bahwa Harga Awal adalah baseline pasar, dan Grade menyesuaikannya berdasarkan kondisi spesifik. Sebutkan juga faktor eksternal seperti sentimen pasar, popularitas model, dan kondisi ekonomi di tahun 2025.
+                        Jelaskan secara profesional mengapa Estimasi Harga Akhir ({format_rupiah(adjusted_price)}) adalah angka yang wajar. Hubungkan penjelasan Anda dengan Estimasi Harga Pasar Awal dan Grade Kondisi yang dipilih. Jelaskan bahwa Harga Awal adalah baseline pasar, dan Grade menyesuaikannya berdasarkan kondisi spesifik. Sebutkan juga faktor eksternal seperti sentimen pasar, popularitas model, dan kondisi ekonomi di tahun {pd.Timestamp.now().year + 1}.
                         
                         Buat penjelasan dalam format poin-poin yang ringkas dan mudah dipahami.
                         """
@@ -467,6 +470,7 @@ def main_page():
 # ==============================================================================
 
 def main():
+    """Fungsi utama untuk menjalankan alur aplikasi."""
     if "is_logged_in" not in st.session_state:
         st.session_state.is_logged_in = False
     
@@ -477,5 +481,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
