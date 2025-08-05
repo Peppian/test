@@ -3,8 +3,6 @@ import pandas as pd
 import base64
 import requests
 import io
-import unicodedata
-import re
 
 # Import library yang dibutuhkan untuk Google API
 from google.oauth2.service_account import Credentials
@@ -64,7 +62,7 @@ def ask_openrouter(prompt: str) -> str:
     except (KeyError, FileNotFoundError):
         return "⚠️ Konfigurasi API Key OpenRouter tidak ditemukan di Streamlit Secrets."
 
-    headers = {"Authorization": f"Bearer {api_key}"}
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     json_data = {
         "model": model,
         "messages": [
@@ -74,7 +72,7 @@ def ask_openrouter(prompt: str) -> str:
     }
     try:
         response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=json_data, timeout=60)
-        response.raise_for_status()  # Will raise an exception for 4XX/5XX errors
+        response.raise_for_status()
         return response.json()["choices"][0]["message"]["content"]
     except requests.exceptions.RequestException as e:
         return f"⚠️ Gagal terhubung ke OpenRouter: {e}"
@@ -100,13 +98,11 @@ def load_data_from_drive(file_id):
         file_stream.seek(0)
         df = pd.read_json(file_stream, encoding='utf-8-sig')
 
-        # 1. Membersihkan spasi di awal/akhir dari kolom teks filter.
         string_cols = ['name', 'model', 'varian']
         for col in string_cols:
             if col in df.columns:
                 df[col] = df[col].astype(str).str.strip()
         
-        # 2. Mengubah semua kolom yang seharusnya angka menjadi tipe data numerik.
         numeric_cols = [
             'tahun', 'harga_terendah', 'harga_baru', 'residu', 'depresiasi', 
             'estimasi', 'depresiasi_2', 'estimasi_2', 'estimasi_3', 
@@ -116,7 +112,6 @@ def load_data_from_drive(file_id):
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
-        # 3. Pastikan kolom 'tahun' adalah integer
         if 'tahun' in df.columns:
             df['tahun'] = df['tahun'].astype(int)
 
@@ -237,7 +232,7 @@ def main_page():
             varian_options = ["-"] + (sorted(df_source[(df_source["name"] == brand) & (df_source["model"] == model)]["varian"].unique()) if brand != "-" and model != "-" else [])
             varian = st.selectbox("Varian", varian_options, key="car_varian", on_change=reset_prediction_state)
         with col4:
-            year_options = ["-"] + (sorted(df_source[(df_source["name"] == brand) & (df_source["model"] == model) & (df_source["varian"] == varian)]["tahun"].unique(), reverse=True) if brand != "-" and model != "-" and varian != "-" else [])
+            year_options = ["-"] + (sorted(df_source[(df_source["name"] == brand) & (df_source["model"] == model) & (df_source["varian"] == varian)]["tahun"].unique(), reverse=True))
             year = st.selectbox("Tahun", [str(y) for y in year_options], key="car_year", on_change=reset_prediction_state)
 
         if st.button("🔍 Lihat Estimasi Harga", use_container_width=True):
@@ -254,7 +249,8 @@ def main_page():
                          st.warning(f"⚠️ Ditemukan {len(results)} data duplikat. Menampilkan hasil pertama.")
                 else:
                     st.error("❌ Kombinasi tersebut tidak ditemukan di dataset.")
-                reset_prediction_state()
+                    # PERBAIKAN: Reset state HANYA jika tidak ditemukan
+                    reset_prediction_state()
         
         if st.session_state.get('prediction_made_car'):
             selected_data = st.session_state.selected_data_car
@@ -298,7 +294,7 @@ def main_page():
         if df_motor.empty:
             st.warning("Data motor tidak dapat dimuat. Fitur ini tidak tersedia.")
         else:
-            # Implementasi lengkap untuk motor bisa mengikuti pola yang sama dengan mobil
+            # Placeholder untuk fitur motor
             st.info("Fitur estimasi motor sedang dalam pengembangan.")
 
     st.markdown("</div>", unsafe_allow_html=True)
