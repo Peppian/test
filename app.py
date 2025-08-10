@@ -273,11 +273,10 @@ def main_page():
                     - Grade Kondisi: {grade_selection}
 
                     Data keuangan internal kami menunjukkan detail berikut:
-                    - Estimasi Harga Pasar Awal: {format_rupiah(initial_price)}
                     - Estimasi Harga Akhir (setelah penyesuaian Grade): {format_rupiah(adjusted_price)}
 
                     Tugas Anda:
-                    Jelaskan secara profesional mengapa Estimasi Harga Akhir ({format_rupiah(adjusted_price)}) adalah angka yang wajar. Hubungkan penjelasan Anda dengan Estimasi Harga Pasar Awal dan Grade Kondisi yang dipilih. Jelaskan bahwa Harga Awal adalah baseline pasar, dan Grade menyesuaikannya berdasarkan kondisi spesifik. Sebutkan juga faktor eksternal seperti sentimen pasar, popularitas model, dan kondisi ekonomi di tahun {pd.Timestamp.now().year}.
+                    Jelaskan secara profesional mengapa Estimasi Harga Akhir ({format_rupiah(adjusted_price)}) adalah angka yang wajar. Hubungkan penjelasan Anda dengan Grade Kondisi yang dipilih. Jelaskan bahwa Grade menyesuaikannya berdasarkan kondisi spesifik. Sebutkan juga faktor eksternal seperti sentimen pasar, popularitas model, dan kondisi ekonomi di tahun {pd.Timestamp.now().year}.
                     
                     Buat penjelasan dalam format poin-poin yang ringkas dan mudah dipahami.
                     """
@@ -311,6 +310,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
