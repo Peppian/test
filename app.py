@@ -81,7 +81,7 @@ def ask_openrouter(prompt: str) -> str:
 
 @st.cache_data(ttl=3600)
 def load_data_from_drive(file_id):
-    """Mengunduh dan memuat data dari Google Drive dengan pembersihan data."""
+    """Mengunduh dan memuat data mobil dari Google Drive dengan pembersihan data."""
     try:
         creds_info = st.secrets["gcp_service_account"]
         creds = Credentials.from_service_account_info(creds_info)
@@ -122,7 +122,7 @@ def load_data_from_drive(file_id):
 
 @st.cache_data
 def load_local_data(path):
-    """Memuat data dari file lokal (motor) dengan pembersihan data."""
+    """Memuat data motor dari file lokal dengan pembersihan data."""
     try:
         if path.endswith('.csv'):
             df = pd.read_csv(path)
@@ -214,6 +214,7 @@ def main_page():
 
     st.markdown('<div class="main-content">', unsafe_allow_html=True)
 
+    # --- BAGIAN ESTIMASI MOBIL ---
     if tipe_estimasi == "Estimasi Mobil":
         st.markdown("<h2 style='color: #2C3E50;'>Estimasi Harga Mobil Bekas</h2>", unsafe_allow_html=True)
         
@@ -235,7 +236,7 @@ def main_page():
             year_options = ["-"] + (sorted(df_source[(df_source["name"] == brand) & (df_source["model"] == model) & (df_source["varian"] == varian)]["tahun"].unique(), reverse=True))
             year = st.selectbox("Tahun", [str(y) for y in year_options], key="car_year", on_change=reset_prediction_state)
 
-        if st.button("🔍 Lihat Estimasi Harga", use_container_width=True):
+        if st.button("🔍 Lihat Estimasi Harga", use_container_width=True, key="car_estimate_button"):
             if "-" in [brand, model, varian, year]:
                 st.warning("⚠️ Mohon lengkapi semua pilihan terlebih dahulu.")
             else:
@@ -249,7 +250,6 @@ def main_page():
                          st.warning(f"⚠️ Ditemukan {len(results)} data duplikat. Menampilkan hasil pertama.")
                 else:
                     st.error("❌ Kombinasi tersebut tidak ditemukan di dataset.")
-                    # PERBAIKAN: Reset state HANYA jika tidak ditemukan
                     reset_prediction_state()
         
         if st.session_state.get('prediction_made_car'):
@@ -276,7 +276,7 @@ def main_page():
                     - Estimasi Harga Akhir (setelah penyesuaian Grade): {format_rupiah(adjusted_price)}
 
                     Tugas Anda:
-                    Jelaskan secara profesional mengapa Estimasi Harga Akhir ({format_rupiah(adjusted_price)}) adalah angka yang wajar. Hubungkan penjelasan Anda dengan Grade Kondisi yang dipilih. Jelaskan bahwa Grade menyesuaikannya berdasarkan kondisi spesifik. Sebutkan juga faktor eksternal seperti sentimen pasar, popularitas model, dan kondisi ekonomi di tahun {pd.Timestamp.now().year}.
+                    Jelaskan secara profesional mengapa Estimasi Harga Akhir ({format_rupiah(adjusted_price)}) adalah angka yang wajar. Hubungkan penjelasan Anda dengan Grade Kondisi yang dipilih. Sebutkan juga faktor eksternal seperti sentimen pasar, popularitas model, dan kondisi ekonomi di tahun {pd.Timestamp.now().year}.
                     
                     Buat penjelasan dalam format poin-poin yang ringkas dan mudah dipahami.
                     """
@@ -287,14 +287,75 @@ def main_page():
                 st.subheader("🤖 Analisis Profesional Estimasi Harga")
                 st.markdown(st.session_state.ai_response_car)
 
+    # --- BAGIAN ESTIMASI MOTOR (DIKEMBALIKAN) ---
     elif tipe_estimasi == "Estimasi Motor":
         st.markdown("<h2 style='color: #2C3E50;'>Estimasi Harga Motor Bekas</h2>", unsafe_allow_html=True)
         
         if df_motor.empty:
             st.warning("Data motor tidak dapat dimuat. Fitur ini tidak tersedia.")
         else:
-            # Placeholder untuk fitur motor
-            st.info("Fitur estimasi motor sedang dalam pengembangan.")
+            df_source = df_motor
+
+            col1, col2 = st.columns(2)
+            with col1:
+                brand_options = ["-"] + sorted(df_source["brand"].unique())
+                brand = st.selectbox("Brand", brand_options, key="motor_brand", on_change=reset_prediction_state)
+            with col2:
+                variant_options = ["-"] + (sorted(df_source[df_source["brand"] == brand]["variant"].unique()) if brand != "-" else [])
+                variant = st.selectbox("Varian", variant_options, key="motor_variant", on_change=reset_prediction_state)
+
+            year_options = ["-"] + (sorted(df_source[(df_source["brand"] == brand) & (df_source["variant"] == variant)]["year"].unique(), reverse=True))
+            year = st.selectbox("Tahun", [str(y) for y in year_options], key="motor_year", on_change=reset_prediction_state)
+
+            if st.button("🔍 Lihat Estimasi Harga", use_container_width=True, key="motor_estimate_button"):
+                if "-" in [brand, variant, year]:
+                    st.warning("⚠️ Mohon lengkapi semua pilihan terlebih dahulu.")
+                else:
+                    mask = ( (df_source["brand"] == brand) & (df_source["variant"] == variant) & (df_source["year"] == int(year)) )
+                    results = df_source[mask]
+                    
+                    if not results.empty:
+                        st.session_state.prediction_made_motor = True
+                        st.session_state.selected_data_motor = results.iloc[0]
+                        if len(results) > 1:
+                            st.warning(f"⚠️ Ditemukan {len(results)} data duplikat. Menampilkan hasil pertama.")
+                    else:
+                        st.error("❌ Kombinasi tersebut tidak ditemukan di dataset.")
+                        reset_prediction_state()
+
+            if st.session_state.get('prediction_made_motor'):
+                selected_data = st.session_state.selected_data_motor
+                initial_price = selected_data.get("output", 0)
+                st.markdown("---")
+                st.info(f"📊 Estimasi Harga Pasar Awal: **{format_rupiah(initial_price)}**")
+                
+                grade_selection = st.selectbox("Pilih Grade Kondisi Kendaraan", options=list(GRADE_FACTORS.keys()), key="motor_grade")
+                adjusted_price = initial_price * GRADE_FACTORS[grade_selection]
+                st.success(f"💰 Estimasi Harga Akhir (Grade {grade_selection.split(' ')[0]}): **{format_rupiah(adjusted_price)}**")
+
+                if st.button("🤖 Generate Analisis Profesional", use_container_width=True, key="motor_ai_button"):
+                    with st.spinner("Menganalisis harga motor..."):
+                        prompt = f"""
+                        Sebagai seorang analis pasar otomotif, berikan analisis harga untuk motor bekas dengan spesifikasi berikut:
+                        - Brand: {selected_data['brand']}
+                        - Varian: {selected_data['variant']}
+                        - Tahun: {int(selected_data['year'])}
+                        - Grade Kondisi: {grade_selection}
+
+                        Data keuangan internal kami menunjukkan detail berikut:
+                        - Estimasi Harga Akhir (setelah penyesuaian Grade): {format_rupiah(adjusted_price)}
+
+                        Tugas Anda:
+                        Jelaskan secara profesional mengapa Estimasi Harga Akhir ({format_rupiah(adjusted_price)}) adalah angka yang wajar. Hubungkan penjelasan Anda dengan Grade Kondisi yang dipilih. Sebutkan juga faktor eksternal seperti sentimen pasar, popularitas model, dan kondisi ekonomi di tahun {pd.Timestamp.now().year}.
+                        
+                        Buat penjelasan dalam format poin-poin yang ringkas dan mudah dipahami.
+                        """
+                        st.session_state.ai_response_motor = ask_openrouter(prompt)
+
+                if st.session_state.get('ai_response_motor'):
+                    st.markdown("---")
+                    st.subheader("🤖 Analisis Profesional Estimasi Harga")
+                    st.markdown(st.session_state.ai_response_motor)
 
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -310,9 +371,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
