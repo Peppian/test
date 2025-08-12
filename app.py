@@ -106,10 +106,12 @@ def load_data_from_drive(file_id):
         numeric_cols = [
             'tahun', 'harga_terendah', 'harga_baru', 'residu', 'depresiasi', 
             'estimasi', 'depresiasi_2', 'estimasi_2', 'estimasi_3', 
-            'avg_estimasi', 'estimator', 'output'
+            'avg_estimasi', 'estimator', 'output', 'correction'
         ]
         for col in numeric_cols:
             if col in df.columns:
+                # PERBAIKAN DI SINI: Hapus koma sebelum konversi ke numerik
+                df[col] = df[col].astype(str).str.replace(',', '', regex=False)
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
         if 'tahun' in df.columns:
@@ -136,6 +138,8 @@ def load_local_data(path):
             numeric_cols_csv = ['output', 'residu', 'depresiasi_residu', 'estimasi_1', 'year']
             for col in numeric_cols_csv:
                 if col in df.columns:
+                    # Hapus juga koma jika ada di data motor
+                    df[col] = df[col].astype(str).str.replace(',', '', regex=False)
                     df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
             
             if 'year' in df.columns:
@@ -371,8 +375,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
