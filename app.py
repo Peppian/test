@@ -19,7 +19,7 @@ USERNAME = "legoas"
 PASSWORD = "admin"
 
 # --- ID File JSON di Google Drive ---
-GOOGLE_DRIVE_FILE_ID = "1bxdfS0X-3esme0-G0CzaRBtvvY0WTUcG"
+GOOGLE_DRIVE_FILE_ID = "13Dcf30mpZxWbPWIbWfhJfZfPMNFSBDEr"
 
 
 # --- Kamus untuk faktor Grade ---
@@ -371,6 +371,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
