@@ -288,7 +288,7 @@ def main_page():
 
             if st.session_state.get('ai_response_car'):
                 st.markdown("---")
-                st.subheader("🤖 Analisis Profesional Estimasi Harga")
+                st.subheader("🤖 AI Analisis LEGOAS untuk Estimasi Harga")
                 st.markdown(st.session_state.ai_response_car)
 
     # --- BAGIAN ESTIMASI MOTOR (DIKEMBALIKAN) ---
@@ -375,6 +375,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
