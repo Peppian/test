@@ -269,7 +269,7 @@ def main_page():
             if st.button("🤖 Generate Analisis Profesional", use_container_width=True, key="car_ai_button"):
                 with st.spinner("Menganalisis harga mobil..."):
                     prompt = f"""
-                    Sebagai seorang analis pasar otomotif, berikan analisis harga untuk mobil bekas dengan spesifikasi berikut:
+                    Sebagai seorang analis pasar otomotif yang bekerja di balai lelang digital bernama LEGOAS, berikan analisis harga untuk mobil bekas dengan spesifikasi berikut:
                     - Brand: {selected_data['name']}
                     - Model: {selected_data['model']}
                     - Varian: {selected_data['varian']}
@@ -280,6 +280,7 @@ def main_page():
                     - Estimasi Harga Akhir (setelah penyesuaian Grade): {format_rupiah(adjusted_price)}
 
                     Tugas Anda:
+                    awali respon dengan Judul "AI Analisis LEGOAS untuk Estimasi Harga"
                     Jelaskan secara profesional mengapa Estimasi Harga Akhir ({format_rupiah(adjusted_price)}) adalah angka yang wajar. Hubungkan penjelasan Anda dengan Grade Kondisi yang dipilih. Sebutkan juga faktor eksternal seperti sentimen pasar, popularitas model, dan kondisi ekonomi di tahun {pd.Timestamp.now().year}.
                     
                     Buat penjelasan dalam format poin-poin yang ringkas dan mudah dipahami.
@@ -375,4 +376,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
