@@ -280,7 +280,6 @@ def main_page():
                     - Estimasi Harga Akhir (setelah penyesuaian Grade): {format_rupiah(adjusted_price)}
 
                     Tugas Anda:
-                    awali respon dengan Judul "AI Analisis LEGOAS untuk Estimasi Harga"
                     Jelaskan secara profesional mengapa Estimasi Harga Akhir ({format_rupiah(adjusted_price)}) adalah angka yang wajar. Hubungkan penjelasan Anda dengan Grade Kondisi yang dipilih. Sebutkan juga faktor eksternal seperti sentimen pasar, popularitas model, dan kondisi ekonomi di tahun {pd.Timestamp.now().year}.
                     
                     Buat penjelasan dalam format poin-poin yang ringkas dan mudah dipahami.
@@ -359,7 +358,7 @@ def main_page():
 
                 if st.session_state.get('ai_response_motor'):
                     st.markdown("---")
-                    st.subheader("🤖 Analisis Profesional Estimasi Harga")
+                    st.subheader("🤖 AI Analisis LEGOAS untuk Estimasi Harga")
                     st.markdown(st.session_state.ai_response_motor)
 
     st.markdown("</div>", unsafe_allow_html=True)
@@ -376,5 +375,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
