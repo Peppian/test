@@ -292,6 +292,7 @@ def extract_prices_from_text(text):
 
 def analyze_with_llm_non_auto(context_text, product_name, api_key, grade):
     """Mengirim teks yang sudah diproses ke OpenRouter untuk dianalisis dengan memperhitungkan grade."""
+    llm_model = st.secrets["openrouter"]["model"]
     
     # Menambahkan instruksi kalkulasi grade ke dalam prompt
     prompt = f"""
@@ -309,7 +310,7 @@ def analyze_with_llm_non_auto(context_text, product_name, api_key, grade):
     INSTRUKSI UTAMA:
     1.  Fokus utama Anda adalah pada PRODUK YANG DICARI. Abaikan harga untuk produk atau aksesoris lain.
     2.  Berdasarkan data, berikan analisis singkat mengenai kondisi pasar dan variasi harga yang Anda temukan.
-    3.  Berikan satu **rekomendasi harga jual wajar** untuk produk tersebut dalam kondisi bekas layak pakai (ini kita sebut sebagai "Harga Grade A"). Jelaskan alasan di balik angka ini.
+    3.  Berikan satu **rekomendasi harga jual wajar** untuk produk tersebut dalam kondisi bekas layak pakai (ini kita selet sebagai "Harga Grade A"). Jelaskan alasan di balik angka ini.
     4.  Jika harga barang yang ditemukan bukan harga barang bekas, maka kalikan harga barang baru yang ditemukan dengan 85%.
     5.  Setelah menentukan Harga Grade A, hitung dan tampilkan harga untuk grade lainnya berdasarkan persentase berikut:
         -   **Harga Grade A (Kondisi Sangat Baik):** Tampilkan harga rekomendasi Anda.
@@ -325,8 +326,7 @@ def analyze_with_llm_non_auto(context_text, product_name, api_key, grade):
             url="https://openrouter.ai/api/v1/chat/completions",
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             data=json.dumps({
-                "model": model
-                , "messages": [{"role": "user", "content": prompt}],
+                "model": llm_model, "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": 1200, "temperature": 0.2
             })
         )
@@ -377,6 +377,12 @@ def main_page():
         st.markdown("---")
         tipe_estimasi = st.radio("Menu", ["Estimasi Mobil", "Estimasi Motor", "Estimasi Non-Automotif"], on_change=reset_prediction_state)
         st.markdown("---")
+        
+        # Menambahkan spasi untuk mendorong tombol keluar ke bawah
+        st.markdown("<div style='flex-grow: 1;'></div>", unsafe_allow_html=True)
+        st.markdown("---")
+        
+        # Tombol keluar di bagian paling bawah sidebar
         if st.button("🔒 Keluar", use_container_width=True):
             st.session_state.is_logged_in = False
             st.rerun()
@@ -598,9 +604,11 @@ def main_page():
         # Proses analisis non-automotif
         if submitted:
             SERPAPI_API_KEY = st.secrets["openrouter"]["serpapi"]
+            OPENROUTER_API_KEY = st.secrets["openrouter"]["api_key"]
+            LLM_MODEL = st.secrets["openrouter"]["model"]
 
-            if not all([SERPAPI_API_KEY, api_key, model]):
-                st.error("Harap konfigurasikan api_key, OPENROUTER_API_KEY, dan model di Streamlit Secrets!")
+            if not all([SERPAPI_API_KEY, OPENROUTER_API_KEY, LLM_MODEL]):
+                st.error("Harap konfigurasikan SERPAPI_API_KEY, OPENROUTER_API_KEY, dan LLM_MODEL di Streamlit Secrets!")
             else:
                 params = {}
                 if category == "Umum":
@@ -670,7 +678,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
