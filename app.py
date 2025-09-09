@@ -292,7 +292,6 @@ def extract_prices_from_text(text):
 
 def analyze_with_llm_non_auto(context_text, product_name, api_key, grade):
     """Mengirim teks yang sudah diproses ke OpenRouter untuk dianalisis dengan memperhitungkan grade."""
-    llm_model = st.secrets.get("LLM_MODEL")
     
     # Menambahkan instruksi kalkulasi grade ke dalam prompt
     prompt = f"""
@@ -326,7 +325,8 @@ def analyze_with_llm_non_auto(context_text, product_name, api_key, grade):
             url="https://openrouter.ai/api/v1/chat/completions",
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             data=json.dumps({
-                "model": llm_model, "messages": [{"role": "user", "content": prompt}],
+                "model": model
+                , "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": 1200, "temperature": 0.2
             })
         )
@@ -598,11 +598,9 @@ def main_page():
         # Proses analisis non-automotif
         if submitted:
             SERPAPI_API_KEY = st.secrets["openrouter"]["serpapi"]
-            OPENROUTER_API_KEY = st.secrets["openrouter"]["api_key"]
-            LLM_MODEL = st.secrets["openrouter"]["model"]
 
-            if not all([SERPAPI_API_KEY, OPENROUTER_API_KEY, LLM_MODEL]):
-                st.error("Harap konfigurasikan SERPAPI_API_KEY, OPENROUTER_API_KEY, dan LLM_MODEL di Streamlit Secrets!")
+            if not all([SERPAPI_API_KEY, api_key, model]):
+                st.error("Harap konfigurasikan api_key, OPENROUTER_API_KEY, dan model di Streamlit Secrets!")
             else:
                 params = {}
                 if category == "Umum":
@@ -672,6 +670,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
