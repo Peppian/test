@@ -597,7 +597,7 @@ def main_page():
 
         # Proses analisis non-automotif
         if submitted:
-            SERPAPI_API_KEY = st.secrets["openrouter"]["api_key"]
+            SERPAPI_API_KEY = st.secrets["openrouter"]["serpapi"]
             OPENROUTER_API_KEY = st.secrets["openrouter"]["api_key"]
             LLM_MODEL = st.secrets["openrouter"]["model"]
 
@@ -672,5 +672,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
