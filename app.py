@@ -258,7 +258,7 @@ def filter_and_extract_text_for_llm(serpapi_data, product_name):
 
     for result in serpapi_data.get('organic_results', []):
         title = result.get('title', '').lower()
-        snippet = result.get('snippet', '').lower()
+        snippet = result.get('snippet', '').lower())
         full_text = title + " " + snippet
 
         if any(neg_word in full_text for neg_word in negative_keywords):
@@ -310,7 +310,7 @@ def analyze_with_llm_non_auto(context_text, product_name, api_key, grade):
     INSTRUKSI UTAMA:
     1.  Fokus utama Anda adalah pada PRODUK YANG DICARI. Abaikan harga untuk produk atau aksesoris lain.
     2.  Berdasarkan data, berikan analisis singkat mengenai kondisi pasar dan variasi harga yang Anda temukan.
-    3.  Berikan satu **rekomendasi harga jual wajar** untuk produk tersebut dalam kondisi bekas layak pakai (ini kita selet sebagai "Harga Grade A"). Jelaskan alasan di balik angka ini.
+    3.  Berikan satu **rekomendasi harga jual wajar** untuk produk tersebut dalam kondisi bekas layak pakai (ini kita sebut sebagai "Harga Grade A"). Jelaskan alasan di balik angka ini.
     4.  Jika harga barang yang ditemukan bukan harga barang bekas, maka kalikan harga barang baru yang ditemukan dengan 85%.
     5.  Setelah menentukan Harga Grade A, hitung dan tampilkan harga untuk grade lainnya berdasarkan persentase berikut:
         -   **Harga Grade A (Kondisi Sangat Baik):** Tampilkan harga rekomendasi Anda.
@@ -376,11 +376,32 @@ def main_page():
             st.image(f"data:image/png;base64,{img_base64}", width=140)
         st.markdown("---")
         tipe_estimasi = st.radio("Menu", ["Estimasi Mobil", "Estimasi Motor", "Estimasi Non-Automotif"], on_change=reset_prediction_state)
-        st.markdown("---")
+        
+        # Tampilkan pengaturan pencarian hanya untuk non-automotif
+        if tipe_estimasi == "Estimasi Non-Automotif":
+            st.markdown("---")
+            st.subheader("Pengaturan Pencarian")
+            category = st.selectbox(
+                "1. Pilih Kategori Barang",
+                ["Umum", "Spare Part", "Alat Berat", "Scrap"]
+            )
+            time_filter_options = {"Semua Waktu": "Semua Waktu", "Setahun Terakhir": "qdr:y", "Sebulan Terakhir": "qdr:m", "Seminggu Terakhir": "qdr:w"}
+            selected_time_filter = st.selectbox("2. Filter Waktu", options=list(time_filter_options.keys()))
+            time_filter_value = time_filter_options[selected_time_filter]
+
+            st.subheader("Filter Lanjutan")
+            use_condition_filter = st.checkbox(
+                "Fokus Barang Bekas", value=True,
+                help="Jika aktif, AI akan fokus mencari barang bekas dan mengabaikan iklan barang baru atau segel."
+            )
+            use_url_filter = st.checkbox(
+                "Fokus Situs Jual-Beli", value=True,
+                help="Jika aktif, pencarian akan diprioritaskan pada situs jual-beli utama untuk hasil yang lebih relevan."
+            )
         
         # Menambahkan spasi untuk mendorong tombol keluar ke bawah
-        st.markdown("<div style='flex-grow: 1;'></div>", unsafe_allow_html=True)
         st.markdown("---")
+        st.markdown("<div style='flex-grow: 1;'></div>", unsafe_allow_html=True)
         
         # Tombol keluar di bagian paling bawah sidebar
         if st.button("🔒 Keluar", use_container_width=True):
@@ -541,25 +562,6 @@ def main_page():
     elif tipe_estimasi == "Estimasi Non-Automotif":
         st.markdown('<h2 class="section-header">Estimasi Harga Barang Non-Automotif</h2>', unsafe_allow_html=True)
         
-        st.sidebar.subheader("Pengaturan Pencarian")
-        category = st.sidebar.selectbox(
-            "1. Pilih Kategori Barang",
-            ["Umum", "Spare Part", "Alat Berat", "Scrap"]
-        )
-        time_filter_options = {"Semua Waktu": "Semua Waktu", "Setahun Terakhir": "qdr:y", "Sebulan Terakhir": "qdr:m", "Seminggu Terakhir": "qdr:w"}
-        selected_time_filter = st.sidebar.selectbox("2. Filter Waktu", options=list(time_filter_options.keys()))
-        time_filter_value = time_filter_options[selected_time_filter]
-
-        st.sidebar.subheader("Filter Lanjutan")
-        use_condition_filter = st.sidebar.checkbox(
-            "Fokus Barang Bekas", value=True,
-            help="Jika aktif, AI akan fokus mencari barang bekas dan mengabaikan iklan barang baru atau segel."
-        )
-        use_url_filter = st.sidebar.checkbox(
-            "Fokus Situs Jual-Beli", value=True,
-            help="Jika aktif, pencarian akan diprioritaskan pada situs jual-beli utama untuk hasil yang lebih relevan."
-        )
-
         # Form untuk input non-automotif
         with st.form("non_auto_form"):
             product_name_display = ""
