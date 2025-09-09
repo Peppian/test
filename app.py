@@ -597,9 +597,9 @@ def main_page():
 
         # Proses analisis non-automotif
         if submitted:
-            SERPAPI_API_KEY = st.secrets.get("serpapi")
-            OPENROUTER_API_KEY = st.secrets.get("api_key")
-            LLM_MODEL = st.secrets.get("model")
+            SERPAPI_API_KEY = st.secrets["openrouter"]["api_key"]
+            OPENROUTER_API_KEY = st.secrets["openrouter"]["api_key"]
+            LLM_MODEL = st.secrets["openrouter"]["model"]
 
             if not all([SERPAPI_API_KEY, OPENROUTER_API_KEY, LLM_MODEL]):
                 st.error("Harap konfigurasikan SERPAPI_API_KEY, OPENROUTER_API_KEY, dan LLM_MODEL di Streamlit Secrets!")
@@ -672,4 +672,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
