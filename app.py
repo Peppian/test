@@ -258,7 +258,7 @@ def filter_and_extract_text_for_llm(serpapi_data, product_name):
 
     for result in serpapi_data.get('organic_results', []):
         title = result.get('title', '').lower()
-        snippet = result.get('snippet', '').lower())
+        snippet = result.get('snippet', '').lower()
         full_text = title + " " + snippet
 
         if any(neg_word in full_text for neg_word in negative_keywords):
@@ -680,3 +680,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
