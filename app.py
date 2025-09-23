@@ -29,7 +29,7 @@ PASSWORD = "admin"
 
 # --- ID File JSON di Google Drive ---
 # DIPINDAHKAN ke dalam fungsi untuk akses yang lebih aman via st.secrets
-# GOOGLE_DRIVE_FILE_ID = st.secrets["logging"]["folder_id"] # Ini untuk data mobil, bukan logging
+GOOGLE_DRIVE_FILE_ID = st.secrets["logging"]["folder_id"] # Ini untuk data mobil, bukan logging
 
 # --- Kamus untuk faktor Grade ---
 GRADE_FACTORS = {
@@ -365,3 +365,4 @@ if __name__ == "__main__":
     # Inisialisasi service GDrive saat aplikasi pertama kali dijalankan
     get_gdrive_service()
     main()
+
