@@ -62,11 +62,13 @@ st.markdown("""
 # ==============================================================================
 
 # --- Fungsi Logging ke Google Drive ---
+# GANTI FUNGSI LAMA ANDA DENGAN VERSI DEBUGGING INI
 def log_activity_to_drive(log_data: dict):
     """
-    Menyimpan log aktivitas ke file JSON harian di folder Google Drive.
-    Membuat file baru jika belum ada, atau menambahkan ke file yang sudah ada.
+    [VERSI DEBUGGING] Fungsi ini HANYA akan mencoba membuat file log BARU setiap saat.
+    Nama file akan unik berdasarkan timestamp untuk memastikan tidak ada konflik.
     """
+    st.info("Mencoba menjalankan fungsi logging [DEBUG MODE]...") # Pesan debug di UI
     try:
         folder_id = st.secrets["logging"]["folder_id"]
         creds_info = st.secrets["gcp_service_account"]
@@ -74,57 +76,35 @@ def log_activity_to_drive(log_data: dict):
         creds = Credentials.from_service_account_info(creds_info, scopes=scopes)
         service = build('drive', 'v3', credentials=creds)
 
-        # Tambahkan timestamp dan user ke data log
+        # Tambahkan info ke log data
         jakarta_tz = pytz.timezone('Asia/Jakarta')
         timestamp = datetime.now(jakarta_tz)
         log_data['timestamp'] = timestamp.isoformat()
         log_data['user'] = st.session_state.get('username', 'unknown')
 
-        # Tentukan nama file log harian
-        filename = f"log-{timestamp.strftime('%Y-%m-%d')}.json"
-
-        # 1. Cari file log untuk hari ini
-        query = f"name='{filename}' and '{folder_id}' in parents and trashed=false"
-        response = service.files().list(q=query, fields='files(id, name)').execute()
-        files = response.get('files', [])
-
-        file_id = None
-        existing_logs = []
-        if files:
-            # Jika file sudah ada, unduh kontennya
-            file_id = files[0]['id']
-            request = service.files().get_media(fileId=file_id)
-            file_stream = io.BytesIO()
-            downloader = MediaIoBaseDownload(file_stream, request)
-            done = False
-            while not done:
-                _, done = downloader.next_chunk()
-            file_stream.seek(0)
-            existing_logs = json.load(file_stream)
-
-        # 2. Tambahkan log baru ke daftar log
-        existing_logs.append(log_data)
-        updated_content = json.dumps(existing_logs, indent=4)
+        # Buat nama file yang dijamin unik setiap saat
+        filename = f"log-debug-{timestamp.strftime('%Y-%m-%d_%H-%M-%S')}.json"
         
-        # Buat file media sementara untuk diunggah
-        media_body = io.BytesIO(updated_content.encode('utf-8'))
-        media = MediaFileUpload(
-            "temp_log.json", # Nama file sementara, tidak disimpan
-            mimetype='application/json'
-        )
-        media.stream = media_body # Muat konten ke media
-
-        if file_id:
-            # 3a. Jika file sudah ada, perbarui (update)
-            service.files().update(fileId=file_id, media_body=media).execute()
-        else:
-            # 3b. Jika file belum ada, buat (create) baru
-            file_metadata = {'name': filename, 'parents': [folder_id]}
-            service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+        # Konversi data log ke format JSON
+        log_content = json.dumps([log_data], indent=4) # Simpan sebagai list berisi 1 item
+        
+        # Siapkan file media untuk diunggah
+        media_body = io.BytesIO(log_content.encode('utf-8'))
+        
+        file_metadata = {'name': filename, 'parents': [folder_id]}
+        
+        # Eksekusi pembuatan file
+        service.files().create(
+            body=file_metadata,
+            media_body=media_body,
+            fields='id'
+        ).execute()
+        
+        st.success(f"✅ [DEBUG] Berhasil membuat file log baru bernama: {filename}")
 
     except Exception as e:
-        # Menampilkan error di konsol/log streamlit agar tidak mengganggu UI
-        print(f"Error saat logging ke Google Drive: {e}")
+        # Jika ada error, TAMPILKAN LANGSUNG DI UI
+        st.error(f"🔴 [DEBUG] GAGAL TOTAL SAAT MENCOBA MEMBUAT FILE: {e}")
 
 # --- Fungsi API OpenRouter ---
 def ask_openrouter(prompt: str) -> str:
@@ -686,4 +666,5 @@ if __name__ == "__main__":
     main()
 
 # --- Akhir dari Skrip ---
+
 
