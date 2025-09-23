@@ -62,51 +62,48 @@ st.markdown("""
 # ==============================================================================
 
 # GANTI LAGI DENGAN VERSI FINAL DEBUG INI
-def log_activity_to_drive(log_data: dict):
+# Impor library gspread di bagian atas file Anda
+import gspread
+
+# HAPUS fungsi log_activity_to_drive YANG LAMA dan GANTI dengan ini:
+def log_activity_to_sheet(log_data: dict):
     """
-    [VERSI DEBUG FINAL] Fungsi ini HANYA akan mencoba membuat file log BARU setiap saat.
-    Dengan perbaikan untuk error 'MediaUpload'.
+    Menyimpan log aktivitas sebagai baris baru di Google Spreadsheet yang ditentukan.
     """
-    st.info("Mencoba menjalankan fungsi logging [DEBUG MODE v2]...")
     try:
-        folder_id = st.secrets["logging"]["folder_id"]
+        # Menggunakan kredensial yang sama, tetapi dengan scopes untuk Sheets DAN Drive
         creds_info = st.secrets["gcp_service_account"]
-        scopes = ['https://www.googleapis.com/auth/drive']
+        scopes = [
+            'https://www.googleapis.com/auth/spreadsheets',
+            'https://www.googleapis.com/auth/drive'
+        ]
         creds = Credentials.from_service_account_info(creds_info, scopes=scopes)
-        service = build('drive', 'v3', credentials=creds)
+        client = gspread.authorize(creds)
 
-        # Tambahkan info ke log data
-        jakarta_tz = pytz.timezone('Asia/Jakarta')
-        timestamp = datetime.now(jakarta_tz)
-        log_data['timestamp'] = timestamp.isoformat()
-        log_data['user'] = st.session_state.get('username', 'unknown')
+        # Buka spreadsheet berdasarkan namanya. Pastikan nama ini sama persis.
+        spreadsheet = client.open("Log Aplikasi LEGOAS") 
+        worksheet = spreadsheet.sheet1 # Ambil sheet pertama
 
-        # Buat nama file yang dijamin unik setiap saat
-        filename = f"log-debug-{timestamp.strftime('%Y-%m-%d_%H-%M-%S')}.json"
+        # Siapkan baris data yang akan ditambahkan
+        # PENTING: Urutan data di sini harus SAMA PERSIS dengan urutan kolom di Sheet Anda
+        new_row = [
+            log_data.get('timestamp', ''),
+            log_data.get('user', ''),
+            log_data.get('tipe_estimasi', ''),
+            # Gabungkan detail query menjadi satu kolom agar rapi
+            log_data.get('detail_query', ''),
+            log_data.get('grade_dipilih', ''),
+            log_data.get('harga_awal', ''),
+            log_data.get('harga_disesuaikan', ''),
+            log_data.get('respon_llm', '')
+        ]
         
-        # Konversi data log ke format JSON
-        log_content_bytes = io.BytesIO(json.dumps([log_data], indent=4).encode('utf-8'))
-        
-        file_metadata = {'name': filename, 'parents': [folder_id]}
-        
-        # --- PERBAIKAN DI SINI ---
-        # "Bungkus" data log kita dengan MediaIoBaseUpload
-        media = MediaIoBaseUpload(log_content_bytes, 
-                                  mimetype='application/json', 
-                                  resumable=True)
-        
-        # Eksekusi pembuatan file dengan menggunakan objek 'media' yang sudah benar
-        service.files().create(
-            body=file_metadata,
-            media_body=media,  # Menggunakan objek media yang sudah dibungkus
-            fields='id'
-        ).execute()
-        
-        st.success(f"✅ [DEBUG] Berhasil membuat file log baru bernama: {filename}")
+        # Tambahkan baris baru ke bagian paling bawah sheet
+        worksheet.append_row(new_row)
 
     except Exception as e:
-        # Jika ada error, TAMPILKAN LANGSUNG DI UI
-        st.error(f"🔴 [DEBUG] GAGAL TOTAL SAAT MENCOBA MEMBUAT FILE: {e}")
+        # Tampilkan error di UI jika gagal, agar mudah di-debug
+        st.error(f"Gagal menyimpan log ke Google Sheet: {e}")
 
 # --- Fungsi API OpenRouter ---
 def ask_openrouter(prompt: str) -> str:
@@ -520,8 +517,21 @@ Tugas Anda: Jelaskan secara profesional mengapa harga tersebut wajar, hubungkan 
                     st.session_state.ai_response_car = response
                     
                     if response and not response.startswith("⚠️"):
-                        log_payload = { "tipe_estimasi": "Mobil", "brand": selected_data['name'], "model": selected_data['model'], "varian": selected_data['varian'], "tahun": int(selected_data['tahun']), "grade_dipilih": grade_selection, "harga_awal": initial_price, "harga_disesuaikan": adjusted_price, "respon_llm": response }
-                        log_activity_to_drive(log_payload)
+                        # Siapkan timestamp dan user sekarang
+                            jakarta_tz = pytz.timezone('Asia/Jakarta')
+                            timestamp = datetime.now(jakarta_tz).isoformat()
+                        user = st.session_state.get('username', 'unknown')
+    
+                        # Gabungkan detail pencarian menjadi satu string
+                        detail_query = f"Mobil: {selected_data['name']} {selected_data['model']} {selected_data['varian']} ({int(selected_data['tahun'])})"
+
+                        log_payload = {
+                            "timestamp": timestamp, "user": user, "tipe_estimasi": "Mobil",
+                            "detail_query": detail_query, "grade_dipilih": grade_selection,
+                            "harga_awal": initial_price, "harga_disesuaikan": adjusted_price,
+                            "respon_llm": response
+                        }
+                        log_activity_to_sheet(log_payload) # Panggil fungsi yang baru
 
             if st.session_state.get('ai_response_car'):
                 st.markdown("---")
@@ -668,6 +678,7 @@ if __name__ == "__main__":
     main()
 
 # --- Akhir dari Skrip ---
+
 
 
 
