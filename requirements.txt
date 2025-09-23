@@ -1,7 +1,6 @@
 streamlit
 pandas
 requests
-base64
 io
 re
 json
