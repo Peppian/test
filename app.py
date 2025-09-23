@@ -534,17 +534,19 @@ def main_page():
                     reset_prediction_state()
         
         # ### MODIFIKASI: Logika setelah menekan tombol "Generate Analisis Profesional"
-        if st.session_state.get('prediction_made_car'):
-            # ... (Bagian ini sebagian besar tetap sama)
-              selected_data = st.session_state.selected_data_car
+# ... bagian estimasi motor
+
+        if st.session_state.get('prediction_made_motor'):
+            # PASTIKAN SEMUA BARIS DI BLOK INI SEJAJAR
+            selected_data = st.session_state.selected_data_motor
             initial_price = selected_data.get("output", 0)
             st.markdown("---")
             st.info(f"📊 Estimasi Harga Pasar Awal: **{format_rupiah(initial_price)}**")
             
-            grade_selection = st.selectbox("Pilih Grade Kondisi Kendaraan", options=list(GRADE_FACTORS.keys()), key="car_grade")
+            grade_selection = st.selectbox("Pilih Grade Kondisi Kendaraan", options=list(GRADE_FACTORS.keys()), key="motor_grade")
             adjusted_price = initial_price * GRADE_FACTORS[grade_selection]
             st.success(f"💰 Estimasi Harga Akhir (Grade {grade_selection.split(' ')[0]}): **{format_rupiah(adjusted_price)}**")
-            
+
             if st.button("🤖 Generate Analisis Profesional", use_container_width=True, key="car_ai_button"):
                 with st.spinner("Menganalisis harga mobil..."):
                     # ... (Prompt tetap sama)
@@ -797,3 +799,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
