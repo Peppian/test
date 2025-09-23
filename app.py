@@ -21,7 +21,7 @@ USERNAME = "legoas"
 PASSWORD = "admin"
 
 # --- ID File JSON di Google Drive ---
-GOOGLE_DRIVE_FILE_ID = "1P2Oh6EUSq0z_JB2DQSOoOxkSR750AQqA"
+GOOGLE_DRIVE_FILE_ID = st.secrets["logging"]["folder_id"]
 
 # --- Kamus untuk faktor Grade ---
 GRADE_FACTORS = {
@@ -680,4 +680,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
