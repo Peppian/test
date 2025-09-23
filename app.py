@@ -70,7 +70,8 @@ def log_activity_to_drive(log_data: dict):
     try:
         folder_id = st.secrets["logging"]["folder_id"]
         creds_info = st.secrets["gcp_service_account"]
-        creds = Credentials.from_service_account_info(creds_info)
+        scopes = ['https://www.googleapis.com/auth/drive']
+        creds = Credentials.from_service_account_info(creds_info, scopes=scopes)
         service = build('drive', 'v3', credentials=creds)
 
         # Tambahkan timestamp dan user ke data log
@@ -685,3 +686,4 @@ if __name__ == "__main__":
     main()
 
 # --- Akhir dari Skrip ---
+
