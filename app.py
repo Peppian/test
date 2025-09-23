@@ -1,3 +1,8 @@
+# ==============================================================================
+# BAGIAN 1: IMPOR, KONFIGURASI, DAN FUNGSI HELPER
+# ==============================================================================
+
+# --- Impor Library Standar dan Pihak Ketiga ---
 import streamlit as st
 import pandas as pd
 import base64
@@ -6,23 +11,23 @@ import io
 import re
 import json
 import numpy as np
-from datetime import datetime # ### BARU: Untuk timestamp
-import pytz # ### BARU: Untuk zona waktu yang benar (Asia/Jakarta)
+from datetime import datetime
+import pytz
 
-# Import library yang dibutuhkan untuk Google API
+# --- Impor Library Google API ---
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload # ### BARU: Untuk upload file
+from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 
 # ==============================================================================
 # KONFIGURASI APLIKASI
 # ==============================================================================
 
-# ------------ KONFIGURASI LOGIN ------------
+# --- Konfigurasi Login ---
 USERNAME = "legoas"
 PASSWORD = "admin"
 
-# --- Kamus untuk faktor Grade ---
+# --- Kamus untuk Faktor Grade ---
 GRADE_FACTORS = {
     'A (Sangat Baik)': 1.0,
     'B (Baik)': 0.94,
@@ -31,15 +36,14 @@ GRADE_FACTORS = {
     'E (Buruk)': 0.23,
 }
 
-# ------------ Konfigurasi Halaman ------------
+# --- Konfigurasi Halaman Streamlit ---
 st.set_page_config(
     page_title="Sistem Estimasi Harga LEGOAS",
     page_icon="🚗",
     layout="wide"
 )
 
-# ------------ CSS Styling ------------
-# ... (Tidak ada perubahan di bagian CSS, tetap sama)
+# --- Styling CSS ---
 st.markdown("""
     <style>
         .error-message { color: #E74C3C; font-weight: bold; text-align: center; }
@@ -54,13 +58,14 @@ st.markdown("""
 
 
 # ==============================================================================
-# ### BARU: FUNGSI UNTUK LOGGING AKTIVITAS ###
+# FUNGSI-FUNGSI HELPER
 # ==============================================================================
 
+# --- Fungsi Logging ke Google Drive ---
 def log_activity_to_drive(log_data: dict):
     """
-    Menyimpan log aktivitas ke file JSON harian di folder Google Drive yang ditentukan.
-    Akan membuat file baru jika belum ada, atau menambahkan ke file yang sudah ada.
+    Menyimpan log aktivitas ke file JSON harian di folder Google Drive.
+    Membuat file baru jika belum ada, atau menambahkan ke file yang sudah ada.
     """
     try:
         folder_id = st.secrets["logging"]["folder_id"]
@@ -74,10 +79,10 @@ def log_activity_to_drive(log_data: dict):
         log_data['timestamp'] = timestamp.isoformat()
         log_data['user'] = st.session_state.get('username', 'unknown')
 
-        # Tentukan nama file log berdasarkan tanggal hari ini
+        # Tentukan nama file log harian
         filename = f"log-{timestamp.strftime('%Y-%m-%d')}.json"
 
-        # 1. Cari file log untuk hari ini di folder target
+        # 1. Cari file log untuk hari ini
         query = f"name='{filename}' and '{folder_id}' in parents and trashed=false"
         response = service.files().list(q=query, fields='files(id, name)').execute()
         files = response.get('files', [])
@@ -85,7 +90,7 @@ def log_activity_to_drive(log_data: dict):
         file_id = None
         existing_logs = []
         if files:
-            # File sudah ada, dapatkan ID dan unduh kontennya
+            # Jika file sudah ada, unduh kontennya
             file_id = files[0]['id']
             request = service.files().get_media(fileId=file_id)
             file_stream = io.BytesIO()
@@ -96,49 +101,33 @@ def log_activity_to_drive(log_data: dict):
             file_stream.seek(0)
             existing_logs = json.load(file_stream)
 
-        # 2. Tambahkan log baru
+        # 2. Tambahkan log baru ke daftar log
         existing_logs.append(log_data)
         updated_content = json.dumps(existing_logs, indent=4)
-        updated_content_bytes = io.BytesIO(updated_content.encode('utf-8'))
-
+        
+        # Buat file media sementara untuk diunggah
+        media_body = io.BytesIO(updated_content.encode('utf-8'))
         media = MediaFileUpload(
-            "temp_log.json", # Nama file sementara, tidak penting
-            mimetype='application/json',
-            resumable=True
+            "temp_log.json", # Nama file sementara, tidak disimpan
+            mimetype='application/json'
         )
-        # Tulis konten ke file sementara yang akan diunggah
-        with open("temp_log.json", "wb") as f:
-            f.write(updated_content_bytes.getvalue())
+        media.stream = media_body # Muat konten ke media
 
         if file_id:
-            # 3a. Jika file sudah ada, UPDATE
-            service.files().update(
-                fileId=file_id,
-                media_body=media
-            ).execute()
-            # st.toast(f"✅ Log ditambahkan ke {filename}", icon="📝")
+            # 3a. Jika file sudah ada, perbarui (update)
+            service.files().update(fileId=file_id, media_body=media).execute()
         else:
-            # 3b. Jika file belum ada, CREATE
+            # 3b. Jika file belum ada, buat (create) baru
             file_metadata = {'name': filename, 'parents': [folder_id]}
-            service.files().create(
-                body=file_metadata,
-                media_body=media,
-                fields='id'
-            ).execute()
-            # st.toast(f"✅ File log baru {filename} dibuat.", icon="📝")
+            service.files().create(body=file_metadata, media_body=media, fields='id').execute()
 
     except Exception as e:
-        # Menampilkan error di konsol/log streamlit, bukan di UI utama
+        # Menampilkan error di konsol/log streamlit agar tidak mengganggu UI
         print(f"Error saat logging ke Google Drive: {e}")
-        # st.error(f"Gagal menyimpan log ke Google Drive: {e}") # Aktifkan jika ingin error terlihat oleh user
 
-
-# ==============================================================================
-# FUNGSI-FUNGSI HELPER (TIDAK ADA PERUBAHAN SIGNIFIKAN)
-# ==============================================================================
-
+# --- Fungsi API OpenRouter ---
 def ask_openrouter(prompt: str) -> str:
-    # ... (Fungsi ini tetap sama)
+    """Mengirim prompt ke OpenRouter API dan mengembalikan respons."""
     try:
         api_key = st.secrets["openrouter"]["api_key"]
         model = st.secrets["openrouter"]["model"]
@@ -162,10 +151,10 @@ def ask_openrouter(prompt: str) -> str:
     except Exception as e:
         return f"⚠️ Terjadi error saat menghubungi API: {e}"
 
-
+# --- Fungsi Pemuatan Data Otomotif ---
 @st.cache_data(ttl=3600)
 def load_data_from_drive(file_id):
-    # ... (Fungsi ini tetap sama)
+    """Mengunduh dan memuat data mobil dari Google Drive dengan pembersihan data."""
     try:
         creds_info = st.secrets["gcp_service_account"]
         creds = Credentials.from_service_account_info(creds_info)
@@ -182,6 +171,7 @@ def load_data_from_drive(file_id):
         file_stream.seek(0)
         df = pd.read_json(file_stream, encoding='utf-8-sig')
 
+        # Pembersihan data string dan numerik
         string_cols = ['name', 'model', 'varian']
         for col in string_cols:
             if col in df.columns:
@@ -209,40 +199,38 @@ def load_data_from_drive(file_id):
 def load_local_data(path):
     """Memuat data motor dari file lokal dengan pembersihan data."""
     try:
-        if path.endswith('.csv'):
-            df = pd.read_csv(path)
-            df.columns = df.columns.str.strip().str.lower()
-            
-            string_cols_motor = ['brand', 'variant']
-            for col in string_cols_motor:
-                if col in df.columns:
-                    df[col] = df[col].astype(str).str.strip()
+        df = pd.read_csv(path)
+        df.columns = df.columns.str.strip().str.lower()
+        
+        string_cols_motor = ['brand', 'variant']
+        for col in string_cols_motor:
+            if col in df.columns:
+                df[col] = df[col].astype(str).str.strip()
 
-            numeric_cols_csv = ['output', 'residu', 'depresiasi_residu', 'estimasi_1', 'year']
-            for col in numeric_cols_csv:
-                if col in df.columns:
-                    # Hapus juga koma jika ada di data motor
-                    df[col] = df[col].astype(str).str.replace(',', '', regex=False)
-                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-            
-            if 'year' in df.columns:
-                df['year'] = df['year'].astype(int)
+        numeric_cols_csv = ['output', 'residu', 'depresiasi_residu', 'estimasi_1', 'year']
+        for col in numeric_cols_csv:
+            if col in df.columns:
+                df[col] = df[col].astype(str).str.replace(',', '', regex=False)
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        
+        if 'year' in df.columns:
+            df['year'] = df['year'].astype(int)
 
-            return df
-        else:
-            st.error(f"Format file lokal tidak didukung: {path}")
-            return pd.DataFrame()
+        return df
     except FileNotFoundError:
         st.error(f"File data motor tidak ditemukan di path: {path}")
         return pd.DataFrame()
 
+# --- Fungsi Umum & UI ---
 def format_rupiah(val):
+    """Memformat angka menjadi string mata uang Rupiah."""
     try:
         return f"Rp {round(float(val)):,}".replace(",", ".")
     except (ValueError, TypeError):
         return "Rp 0"
 
 def image_to_base64(image_path):
+    """Mengonversi file gambar menjadi string base64 untuk ditampilkan di HTML."""
     try:
         with open(image_path, "rb") as f:
             return base64.b64encode(f.read()).decode()
@@ -250,6 +238,7 @@ def image_to_base64(image_path):
         return None
 
 def reset_prediction_state():
+    """Mereset session state terkait prediksi saat pengguna mengubah pilihan."""
     keys_to_reset = [
         'prediction_made_car', 'selected_data_car', 'ai_response_car',
         'prediction_made_motor', 'selected_data_motor', 'ai_response_motor',
@@ -258,8 +247,10 @@ def reset_prediction_state():
     for key in keys_to_reset:
         st.session_state.pop(key, None)
 
-# ... (Semua fungsi build_query, search_with_serpapi, filter_and_extract_text_for_llm, analyze_with_llm_non_auto tetap sama)
+
+# --- Fungsi-fungsi untuk Non-Automotif ---
 def build_common_query(keywords, time_filter, use_condition_filter, use_url_filter):
+    """Membangun query fleksibel untuk BARANG UMUM."""
     query_parts = [f'jual {keywords}']
     if use_condition_filter:
         query_parts.append("(inurl:bekas OR inurl:second OR inurl:seken OR inurl:seperti-baru OR inurl:2nd OR inurl:like-new) -BNIB -segel")
@@ -270,17 +261,14 @@ def build_common_query(keywords, time_filter, use_condition_filter, use_url_filt
     if time_filter != "Semua Waktu":
         params["tbs"] = time_filter
     return params
-# (Saya singkat untuk menjaga respons tetap ringkas)
+
 def build_spare_part_query(keywords, time_filter, use_condition_filter, use_url_filter):
     """Membangun query optimal untuk kategori SPARE PART."""
     query_parts = [f'jual {keywords}']
-
     if use_condition_filter:
         query_parts.append("(inurl:bekas OR inurl:second OR inurl:seken OR inurl:seperti-baru OR inurl:2nd OR inurl:copotan OR inurl:like-new) -BNIB -segel")
-
     if use_url_filter:
         query_parts.append("(site:tokopedia.com OR site:shopee.co.id OR site:monotaro.id OR site:olx.co.id)")
-    
     query = " ".join(query_parts)
     params = {"q": query.strip(), "engine": "google", "gl": "id", "hl": "id"}
     if time_filter != "Semua Waktu":
@@ -291,13 +279,10 @@ def build_heavy_equipment_query(alat_type, brand, model, year, time_filter, use_
     """Membangun query optimal untuk kategori ALAT BERAT."""
     search_keywords = f'jual {alat_type} {brand} {model} tahun {year}'
     query_parts = [search_keywords]
-
     if use_condition_filter:
         query_parts.append("(bekas|second) -sewa -rental -disewakan")
-        
     if use_url_filter:
         query_parts.append("(site:olx.co.id OR site:indotrading.com OR site:alatberat.com OR site:jualo.com)")
-
     query = " ".join(query_parts)
     params = {"q": query.strip(), "engine": "google", "gl": "id", "hl": "id"}
     if time_filter != "Semua Waktu":
@@ -313,10 +298,10 @@ def build_scrap_query(scrap_type, unit, time_filter):
     return params
 
 def search_with_serpapi(params, api_key):
-    """Melakukan pencarian menggunakan API."""
+    """Melakukan pencarian menggunakan SerpAPI."""
     params["api_key"] = api_key
     try:
-        response = requests.get("https://serpapi.com/search.json", params=params)
+        response = requests.get("https://serpapi.com/search.json", params=params, timeout=20)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
@@ -324,7 +309,7 @@ def search_with_serpapi(params, api_key):
         return None
 
 def filter_and_extract_text_for_llm(serpapi_data, product_name):
-    """Mengekstrak teks relevan DARI HASIL YANG SUDAH DIFILTER untuk presisi."""
+    """Mengekstrak teks relevan dari hasil pencarian untuk dianalisis LLM."""
     texts = []
     main_keywords = [word.lower() for word in product_name.split() if len(word) > 2]
     negative_keywords = ['baru', 'bnib', 'resmi', 'official', 'store', 'casing', 'charger', 'aksesoris', 'sewa', 'rental']
@@ -349,7 +334,7 @@ def filter_and_extract_text_for_llm(serpapi_data, product_name):
     return "\n".join(filter(None, texts))
 
 def extract_prices_from_text(text):
-    """Fungsi untuk mengekstrak harga dari teks menggunakan regex."""
+    """Mengekstrak harga dari teks menggunakan regex."""
     price_pattern = r'Rp\s*\.?\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)'
     prices = []
     matches = re.findall(price_pattern, text)
@@ -364,10 +349,9 @@ def extract_prices_from_text(text):
     return prices
 
 def analyze_with_llm_non_auto(context_text, product_name, api_key, grade):
-    """Mengirim teks yang sudah diproses ke OpenRouter untuk dianalisis dengan memperhitungkan grade."""
+    """Mengirim teks yang sudah diproses ke OpenRouter untuk dianalisis."""
     llm_model = st.secrets["openrouter"]["model"]
     
-    # Menambahkan instruksi kalkulasi grade ke dalam prompt
     prompt = f"""
     Anda adalah asisten ahli analisis harga barang bekas yang bekerja di balai lelang digital LEGOAS.
     Tugas Anda adalah menganalisis KONTEKS PENCARIAN untuk menemukan harga pasaran wajar.
@@ -418,27 +402,36 @@ def analyze_with_llm_non_auto(context_text, product_name, api_key, grade):
         return None
 
 # ==============================================================================
-# HALAMAN APLIKASI
+# BAGIAN 2: HALAMAN APLIKASI DAN LOGIKA EKSEKUSI UTAMA
 # ==============================================================================
 
 def login_page():
-    st.markdown('<div class="login-container"><div class="login-icon">🔒</div><h2 class="login-title">Silakan Login Terlebih Dahulu</h2>', unsafe_allow_html=True)
+    """Menampilkan halaman login untuk pengguna."""
+    st.markdown('<div class="login-container">', unsafe_allow_html=True)
+    st.markdown('<div class="login-icon">🔒</div><h2 class="login-title">Silakan Login Terlebih Dahulu</h2>', unsafe_allow_html=True)
+    
     with st.form("login_form"):
         username = st.text_input("Username", placeholder="Masukkan username Anda")
         password = st.text_input("Password", type="password", placeholder="Masukkan password Anda")
+        
         if st.form_submit_button("Masuk", use_container_width=True):
             if username == USERNAME and password == PASSWORD:
                 st.session_state.is_logged_in = True
-                st.session_state.username = username  # ### MODIFIKASI: Simpan username
+                st.session_state.username = username
                 st.rerun()
             else:
                 st.markdown('<p class="error-message">Username atau password salah</p>', unsafe_allow_html=True)
+                
     st.markdown('<div class="login-footer">Sistem Estimasi Harga LEGOAS<br>© 2025</div></div>', unsafe_allow_html=True)
 
+
 def main_page():
-    ### MODIFIKASI: Menggunakan ID dari secrets
+    """Menampilkan halaman utama aplikasi setelah login berhasil."""
+    # --- Muat Data ---
+    # Membaca ID file mobil dari secrets
     GOOGLE_DRIVE_FILE_ID = st.secrets["data_sources"]["mobil_data_id"]
     
+    # Inisialisasi data di session state jika belum ada
     if 'df_mobil' not in st.session_state:
         st.session_state.df_mobil = load_data_from_drive(GOOGLE_DRIVE_FILE_ID)
         st.session_state.df_motor = load_local_data("dt/mtr.csv")
@@ -446,52 +439,47 @@ def main_page():
     df_mobil = st.session_state.df_mobil
     df_motor = st.session_state.df_motor
     
-    # ... (Bagian sidebar tetap sama)
+    # --- Sidebar ---
     with st.sidebar:
         logo_path = "dt/logo.png"
         img_base64 = image_to_base64(logo_path)
         if img_base64:
             st.image(f"data:image/png;base64,{img_base64}", width=140)
         st.markdown("---")
-        tipe_estimasi = st.radio("Menu", ["Estimasi Mobil", "Estimasi Motor", "Estimasi Non-Automotif"], on_change=reset_prediction_state)
         
-        # Tampilkan pengaturan pencarian hanya untuk non-automotif
+        # Menu Pilihan Estimasi
+        tipe_estimasi = st.radio(
+            "Pilih Menu Estimasi", 
+            ["Estimasi Mobil", "Estimasi Motor", "Estimasi Non-Automotif"], 
+            on_change=reset_prediction_state
+        )
+        
+        # Pengaturan Pencarian dinamis hanya untuk Non-Automotif
         if tipe_estimasi == "Estimasi Non-Automotif":
             st.markdown("---")
             st.subheader("Pengaturan Pencarian")
-            category = st.selectbox(
-                "1. Pilih Kategori Barang",
-                ["Umum", "Spare Part", "Alat Berat", "Scrap"]
-            )
+            category = st.selectbox("1. Pilih Kategori Barang", ["Umum", "Spare Part", "Alat Berat", "Scrap"])
             time_filter_options = {"Semua Waktu": "Semua Waktu", "Setahun Terakhir": "qdr:y", "Sebulan Terakhir": "qdr:m", "Seminggu Terakhir": "qdr:w"}
             selected_time_filter = st.selectbox("2. Filter Waktu", options=list(time_filter_options.keys()))
             time_filter_value = time_filter_options[selected_time_filter]
 
             st.subheader("Filter Lanjutan")
-            use_condition_filter = st.checkbox(
-                "Fokus Barang Bekas", value=True,
-                help="Jika aktif, AI akan fokus mencari barang bekas dan mengabaikan iklan barang baru atau segel."
-            )
-            use_url_filter = st.checkbox(
-                "Fokus Situs Jual-Beli", value=True,
-                help="Jika aktif, pencarian akan diprioritaskan pada situs jual-beli utama untuk hasil yang lebih relevan."
-            )
+            use_condition_filter = st.checkbox("Fokus Barang Bekas", value=True, help="Fokus mencari barang bekas dan mengabaikan iklan barang baru.")
+            use_url_filter = st.checkbox("Fokus Situs Jual-Beli", value=True, help="Pencarian diprioritaskan pada situs jual-beli utama.")
         
-        # Menambahkan spasi untuk mendorong tombol keluar ke bawah
-        st.markdown("---")
-        st.markdown("<div style='flex-grow: 1;'></div>", unsafe_allow_html=True)
-        
-        # ...
+        # Tombol Keluar di bagian bawah
+        st.markdown("<br><br>", unsafe_allow_html=True)
         if st.button("🔒 Keluar", use_container_width=True):
-            st.session_state.is_logged_in = False
-            # ### MODIFIKASI: Hapus username saat logout
-            if 'username' in st.session_state:
-                del st.session_state['username']
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
             st.rerun()
-    
+
+    # --- Halaman Utama ---
     st.markdown('<h1 class="main-header">Sistem Estimasi Harga LEGOAS</h1>', unsafe_allow_html=True)
 
-    # --- BAGIAN ESTIMASI MOBIL ---
+    # ========================
+    # --- ESTIMASI MOBIL ---
+    # ========================
     if tipe_estimasi == "Estimasi Mobil":
         st.markdown('<h2 class="section-header">Estimasi Harga Mobil Bekas</h2>', unsafe_allow_html=True)
         
@@ -499,299 +487,195 @@ def main_page():
             st.error("Data mobil tidak dapat dimuat. Aplikasi tidak dapat dilanjutkan.")
             return
             
-        df_source = df_mobil
-        
         col1, col2 = st.columns(2)
         with col1:
-            brand_options = ["-"] + sorted(df_source["name"].unique())
-            brand = st.selectbox("Brand", brand_options, key="car_brand", on_change=reset_prediction_state)
+            brand = st.selectbox("Brand", ["-"] + sorted(df_mobil["name"].unique()), key="car_brand", on_change=reset_prediction_state)
         with col2:
-            model_options = ["-"] + (sorted(df_source[df_source["name"] == brand]["model"].unique()) if brand != "-" else [])
+            model_options = ["-"] + (sorted(df_mobil[df_mobil["name"] == brand]["model"].unique()) if brand != "-" else [])
             model = st.selectbox("Model", model_options, key="car_model", on_change=reset_prediction_state)
 
         col3, col4 = st.columns(2)
         with col3:
-            varian_options = ["-"] + (sorted(df_source[(df_source["name"] == brand) & (df_source["model"] == model)]["varian"].unique()) if brand != "-" and model != "-" else [])
+            varian_options = ["-"] + (sorted(df_mobil[(df_mobil["name"] == brand) & (df_mobil["model"] == model)]["varian"].unique()) if brand != "-" and model != "-" else [])
             varian = st.selectbox("Varian", varian_options, key="car_varian", on_change=reset_prediction_state)
         with col4:
-            year_options = ["-"] + (sorted(df_source[(df_source["name"] == brand) & (df_source["model"] == model) & (df_source["varian"] == varian)]["tahun"].unique(), reverse=True))
+            year_options = ["-"] + (sorted(df_mobil[(df_mobil["name"] == brand) & (df_mobil["model"] == model) & (df_mobil["varian"] == varian)]["tahun"].unique(), reverse=True))
             year = st.selectbox("Tahun", [str(y) for y in year_options], key="car_year", on_change=reset_prediction_state)
 
         if st.button("🔍 Lihat Estimasi Harga", use_container_width=True, key="car_estimate_button"):
             if "-" in [brand, model, varian, year]:
                 st.warning("⚠️ Mohon lengkapi semua pilihan terlebih dahulu.")
             else:
-                mask = ( (df_source["name"] == brand) & (df_source["model"] == model) & (df_source["varian"] == varian) & (df_source["tahun"] == int(year)) )
-                results = df_source[mask]
-                
+                mask = ( (df_mobil["name"] == brand) & (df_mobil["model"] == model) & (df_mobil["varian"] == varian) & (df_mobil["tahun"] == int(year)) )
+                results = df_mobil[mask]
                 if not results.empty:
                     st.session_state.prediction_made_car = True
                     st.session_state.selected_data_car = results.iloc[0]
-                    if len(results) > 1:
-                         st.warning(f"⚠️ Ditemukan {len(results)} data duplikat. Menampilkan hasil pertama.")
                 else:
                     st.error("❌ Kombinasi tersebut tidak ditemukan di dataset.")
                     reset_prediction_state()
         
-        # ### MODIFIKASI: Logika setelah menekan tombol "Generate Analisis Profesional"
-# ... bagian estimasi motor
-
-        if st.session_state.get('prediction_made_motor'):
-            # PASTIKAN SEMUA BARIS DI BLOK INI SEJAJAR
-            selected_data = st.session_state.selected_data_motor
+        if st.session_state.get('prediction_made_car'):
+            selected_data = st.session_state.selected_data_car
             initial_price = selected_data.get("output", 0)
             st.markdown("---")
             st.info(f"📊 Estimasi Harga Pasar Awal: **{format_rupiah(initial_price)}**")
             
-            grade_selection = st.selectbox("Pilih Grade Kondisi Kendaraan", options=list(GRADE_FACTORS.keys()), key="motor_grade")
+            grade_selection = st.selectbox("Pilih Grade Kondisi Kendaraan", options=list(GRADE_FACTORS.keys()), key="car_grade")
             adjusted_price = initial_price * GRADE_FACTORS[grade_selection]
             st.success(f"💰 Estimasi Harga Akhir (Grade {grade_selection.split(' ')[0]}): **{format_rupiah(adjusted_price)}**")
 
             if st.button("🤖 Generate Analisis Profesional", use_container_width=True, key="car_ai_button"):
                 with st.spinner("Menganalisis harga mobil..."):
-                    # ... (Prompt tetap sama)
-                    prompt = f"""
-                    Sebagai seorang analis pasar otomotif yang bekerja di balai lelang digital bernama LEGOAS, berikan analisis harga untuk mobil bekas dengan spesifikasi berikut:
-                    - Brand: {selected_data['name']}
-                    - Model: {selected_data['model']}
-                    - Varian: {selected_data['varian']}
-                    - Tahun: {int(selected_data['tahun'])}
-                    - Grade Kondisi: {grade_selection}
+                    prompt = f"""Sebagai analis pasar otomotif di LEGOAS, berikan analisis harga untuk mobil bekas:
+- Detail: {selected_data['name']} {selected_data['model']} {selected_data['varian']} tahun {int(selected_data['tahun'])}
+- Grade Kondisi: {grade_selection}
+- Estimasi Harga Akhir: {format_rupiah(adjusted_price)}
 
-                    Data keuangan internal kami menunjukkan detail berikut:
-                    - Estimasi Harga Akhir (setelah penyesuaian Grade): {format_rupiah(adjusted_price)}
-
-                    Tugas Anda:
-                    Jelaskan secara profesional mengapa Estimasi Harga Akhir ({format_rupiah(adjusted_price)}) adalah angka yang wajar. Hubungkan penjelasan Anda dengan Grade Kondisi yang dipilih. Sebutkan juga faktor eksternal seperti sentimen pasar, popularitas model, dan kondisi ekonomi di tahun {pd.Timestamp.now().year}.
-                    
-                    Buat penjelasan dalam format poin-poin yang ringkas dan mudah dipahami.
-                    """
+Tugas Anda: Jelaskan secara profesional mengapa harga tersebut wajar, hubungkan dengan grade, sentimen pasar, popularitas model, dan kondisi ekonomi di tahun {pd.Timestamp.now().year}. Gunakan format poin-poin."""
                     response = ask_openrouter(prompt)
                     st.session_state.ai_response_car = response
                     
-                    # ### MODIFIKASI: Tambahkan log jika AI berhasil merespons
                     if response and not response.startswith("⚠️"):
-                        log_payload = {
-                            "tipe_estimasi": "Mobil",
-                            "brand": selected_data['name'],
-                            "model": selected_data['model'],
-                            "varian": selected_data['varian'],
-                            "tahun": int(selected_data['tahun']),
-                            "grade_dipilih": grade_selection,
-                            "harga_awal": initial_price,
-                            "harga_disesuaikan": adjusted_price,
-                            "respon_llm": response
-                        }
+                        log_payload = { "tipe_estimasi": "Mobil", "brand": selected_data['name'], "model": selected_data['model'], "varian": selected_data['varian'], "tahun": int(selected_data['tahun']), "grade_dipilih": grade_selection, "harga_awal": initial_price, "harga_disesuaikan": adjusted_price, "respon_llm": response }
                         log_activity_to_drive(log_payload)
 
             if st.session_state.get('ai_response_car'):
                 st.markdown("---")
-                st.subheader("🤖 AI Analisis LEGOAS untuk Estimasi Harga")
+                st.subheader("🤖 AI Analisis LEGOAS")
                 st.markdown(st.session_state.ai_response_car)
 
-    # --- BAGIAN ESTIMASI MOTOR ---
+    # ========================
+    # --- ESTIMASI MOTOR ---
+    # ========================
     elif tipe_estimasi == "Estimasi Motor":
         st.markdown('<h2 class="section-header">Estimasi Harga Motor Bekas</h2>', unsafe_allow_html=True)
         
         if df_motor.empty:
             st.warning("Data motor tidak dapat dimuat. Fitur ini tidak tersedia.")
         else:
-            df_source = df_motor
-
             col1, col2 = st.columns(2)
             with col1:
-                brand_options = ["-"] + sorted(df_source["brand"].unique())
-                brand = st.selectbox("Brand", brand_options, key="motor_brand", on_change=reset_prediction_state)
+                brand = st.selectbox("Brand", ["-"] + sorted(df_motor["brand"].unique()), key="motor_brand", on_change=reset_prediction_state)
             with col2:
-                variant_options = ["-"] + (sorted(df_source[df_source["brand"] == brand]["variant"].unique()) if brand != "-" else [])
+                variant_options = ["-"] + (sorted(df_motor[df_motor["brand"] == brand]["variant"].unique()) if brand != "-" else [])
                 variant = st.selectbox("Varian", variant_options, key="motor_variant", on_change=reset_prediction_state)
-
-            year_options = ["-"] + (sorted(df_source[(df_source["brand"] == brand) & (df_source["variant"] == variant)]["year"].unique(), reverse=True))
+            
+            year_options = ["-"] + (sorted(df_motor[(df_motor["brand"] == brand) & (df_motor["variant"] == variant)]["year"].unique(), reverse=True))
             year = st.selectbox("Tahun", [str(y) for y in year_options], key="motor_year", on_change=reset_prediction_state)
 
             if st.button("🔍 Lihat Estimasi Harga", use_container_width=True, key="motor_estimate_button"):
                 if "-" in [brand, variant, year]:
                     st.warning("⚠️ Mohon lengkapi semua pilihan terlebih dahulu.")
                 else:
-                    mask = ( (df_source["brand"] == brand) & (df_source["variant"] == variant) & (df_source["year"] == int(year)) )
-                    results = df_source[mask]
-                    
+                    mask = ( (df_motor["brand"] == brand) & (df_motor["variant"] == variant) & (df_motor["year"] == int(year)) )
+                    results = df_motor[mask]
                     if not results.empty:
                         st.session_state.prediction_made_motor = True
                         st.session_state.selected_data_motor = results.iloc[0]
-                        if len(results) > 1:
-                            st.warning(f"⚠️ Ditemukan {len(results)} data duplikat. Menampilkan hasil pertama.")
                     else:
                         st.error("❌ Kombinasi tersebut tidak ditemukan di dataset.")
                         reset_prediction_state()
 
-        # ### MODIFIKASI: Logika setelah menekan tombol "Generate Analisis Profesional"
-        if st.session_state.get('prediction_made_motor'):
-            selected_data = st.session_state.selected_data_motor
-            initial_price = selected_data.get("output", 0)
-            st.markdown("---")
-            st.info(f"📊 Estimasi Harga Pasar Awal: **{format_rupiah(initial_price)}**")
-                
-            grade_selection = st.selectbox("Pilih Grade Kondisi Kendaraan", options=list(GRADE_FACTORS.keys()), key="motor_grade")
-            adjusted_price = initial_price * GRADE_FACTORS[grade_selection]
-            st.success(f"💰 Estimasi Harga Akhir (Grade {grade_selection.split(' ')[0]}): **{format_rupiah(adjusted_price)}**")
-
-            if st.button("🤖 Generate Analisis Profesional", use_container_width=True, key="motor_ai_button"):
-                with st.spinner("Menganalisis harga motor..."):
-                        prompt = f"""
-                        Sebagai seorang analis pasar otomotif, berikan analisis harga untuk motor bekas dengan spesifikasi berikut:
-                        - Brand: {selected_data['brand']}
-                        - Varian: {selected_data['variant']}
-                        - Tahun: {int(selected_data['year'])}
-                        - Grade Kondisi: {grade_selection}
-
-                        Data keuangan internal kami menunjukkan detail berikut:
-                        - Estimasi Harga Akhir (setelah penyesuaian Grade): {format_rupiah(adjusted_price)}
-
-                        Tugas Anda:
-                        Jelaskan secara profesional mengapa Estimasi Harga Akhir ({format_rupiah(adjusted_price)}) adalah angka yang wajar. Hubungkan penjelasan Anda dengan Grade Kondisi yang dipilih. Sebutkan juga faktor eksternal seperti sentimen pasar, popularitas model, dan kondisi ekonomi di tahun {pd.Timestamp.now().year}.
-                        
-                        Buat penjelasan dalam format poin-poin yang ringkas dan mudah dipahami.
-                        """
-                    response = ask_openrouter(prompt)
-                    st.session_state.ai_response_motor = response
-
-                    # ### MODIFIKASI: Tambahkan log jika AI berhasil merespons
-                    if response and not response.startswith("⚠️"):
-                        log_payload = {
-                            "tipe_estimasi": "Motor",
-                            "brand": selected_data['brand'],
-                            "varian": selected_data['variant'],
-                            "tahun": int(selected_data['year']),
-                            "grade_dipilih": grade_selection,
-                            "harga_awal": initial_price,
-                            "harga_disesuaikan": adjusted_price,
-                            "respon_llm": response
-                        }
-                        log_activity_to_drive(log_payload)
-
-            if st.session_state.get('ai_response_motor'):
+            if st.session_state.get('prediction_made_motor'):
+                selected_data = st.session_state.selected_data_motor
+                initial_price = selected_data.get("output", 0)
                 st.markdown("---")
-                st.subheader("🤖 AI Analisis LEGOAS untuk Estimasi Harga")
-                st.markdown(st.session_state.ai_response_motor)
+                st.info(f"📊 Estimasi Harga Pasar Awal: **{format_rupiah(initial_price)}**")
+                
+                grade_selection = st.selectbox("Pilih Grade Kondisi Kendaraan", options=list(GRADE_FACTORS.keys()), key="motor_grade")
+                adjusted_price = initial_price * GRADE_FACTORS[grade_selection]
+                st.success(f"💰 Estimasi Harga Akhir (Grade {grade_selection.split(' ')[0]}): **{format_rupiah(adjusted_price)}**")
 
-    # --- BAGIAN ESTIMASI NON-AUTOMOTIF ---
+                if st.button("🤖 Generate Analisis Profesional", use_container_width=True, key="motor_ai_button"):
+                    with st.spinner("Menganalisis harga motor..."):
+                        prompt = f"""Sebagai analis pasar otomotif di LEGOAS, berikan analisis harga untuk motor bekas:
+- Detail: {selected_data['brand']} {selected_data['variant']} tahun {int(selected_data['year'])}
+- Grade Kondisi: {grade_selection}
+- Estimasi Harga Akhir: {format_rupiah(adjusted_price)}
+
+Tugas Anda: Jelaskan secara profesional mengapa harga tersebut wajar, hubungkan dengan grade, sentimen pasar, popularitas model, dan kondisi ekonomi di tahun {pd.Timestamp.now().year}. Gunakan format poin-poin."""
+                        response = ask_openrouter(prompt)
+                        st.session_state.ai_response_motor = response
+
+                        if response and not response.startswith("⚠️"):
+                            log_payload = { "tipe_estimasi": "Motor", "brand": selected_data['brand'], "varian": selected_data['variant'], "tahun": int(selected_data['year']), "grade_dipilih": grade_selection, "harga_awal": initial_price, "harga_disesuaikan": adjusted_price, "respon_llm": response }
+                            log_activity_to_drive(log_payload)
+
+                if st.session_state.get('ai_response_motor'):
+                    st.markdown("---")
+                    st.subheader("🤖 AI Analisis LEGOAS")
+                    st.markdown(st.session_state.ai_response_motor)
+
+    # =============================
+    # --- ESTIMASI NON-AUTOMOTIF ---
+    # =============================
     elif tipe_estimasi == "Estimasi Non-Automotif":
         st.markdown('<h2 class="section-header">Estimasi Harga Barang Non-Automotif</h2>', unsafe_allow_html=True)
         
-        # Form untuk input non-automotif
         with st.form("non_auto_form"):
             product_name_display = ""
-            grade_input = "A"  # Default grade
+            grade_input = "A" 
 
-            # Langkah 1: Pengguna mengisi detail barang terlebih dahulu
             if category == "Umum":
-                st.subheader("📦 Detail Barang Umum")
-                keywords = st.text_input("Masukkan Nama Barang", "iPhone 14 Pro 256GB", help="Tips: Coba sespesifik mungkin untuk hasil terbaik.")
-                product_name_display = keywords.lower()
+                keywords = st.text_input("Masukkan Nama Barang", "iPhone 14 Pro 256GB", help="Coba sespesifik mungkin untuk hasil terbaik.")
+                product_name_display = keywords
             elif category == "Spare Part":
-                st.subheader("⚙️ Detail Spare Part")
-                keywords = st.text_input("Masukkan Nama Spare Part", "Busi Honda Vario 125", help="Contoh: 'Kampas rem Avanza', 'Filter oli Xenia 1.3'")
-                product_name_display = keywords.lower()
+                keywords = st.text_input("Masukkan Nama Spare Part", "Busi Honda Vario 125", help="Contoh: 'Kampas rem Avanza'")
+                product_name_display = keywords
             elif category == "Alat Berat":
-                st.subheader("🛠️ Detail Alat Berat")
                 alat_type = st.text_input("Jenis Alat", "Excavator")
                 brand = st.text_input("Merek", "Komatsu")
                 model = st.text_input("Model / Kapasitas", "PC200-8")
                 year = st.text_input("Tahun (Wajib)", "2015")
-                product_name_display = f"{alat_type} {brand} {model} {year}".strip().lower()
+                product_name_display = f"{alat_type} {brand} {model} {year}"
             elif category == "Scrap":
-                st.subheader("♻️ Detail Limbah (Scrap)")
-                scrap_options = ["Besi Tua", "Tembaga", "Aluminium", "Kuningan", "Aki Bekas", "Minyak Jelantah", "Oli Bekas", "Kardus Bekas", "Botol Plastik PET"]
-                scrap_type = st.selectbox("Pilih Jenis Limbah", scrap_options)
-                unit_options = ["per kg", "per liter", "per drum", "per unit"]
-                unit = st.selectbox("Pilih Satuan Harga", unit_options)
+                scrap_type = st.selectbox("Pilih Jenis Limbah", ["Besi Tua", "Tembaga", "Aluminium", "Aki Bekas", "Oli Bekas", "Kardus Bekas"])
+                unit = st.selectbox("Pilih Satuan Harga", ["per kg", "per liter", "per drum", "per unit"])
                 product_name_display = f"{scrap_type} ({unit})"
 
-            # Langkah 2: Pengguna memilih grade sebagai opsi terakhir (jika bukan Scrap)
-            if category in ["Umum", "Spare Part", "Alat Berat"]:
-                st.subheader("⭐ Pilih Grade Kondisi Barang")
-                grade_input = st.selectbox(
-                    "Grade", 
-                    options=["A", "B", "C", "D", "E"],
-                    help="Pilih kondisi barang: A (Sangat Baik), B (Baik), C (Cukup), D (Kurang), E (Buruk)."
-                )
+            if category != "Scrap":
+                grade_input = st.selectbox("Pilih Grade Kondisi Barang", ["A", "B", "C", "D", "E"], help="A (Sangat Baik), E (Buruk).")
 
-            # Langkah 3: Tombol Submit
-            submitted = st.form_submit_button("Analisis Harga Sekarang!")
-        
-        # ### MODIFIKASI: Logika setelah analisis berhasil
+            submitted = st.form_submit_button("Analisis Harga Sekarang!", use_container_width=True)
+
         if submitted:
             SERPAPI_API_KEY = st.secrets["openrouter"]["serpapi"]
             OPENROUTER_API_KEY = st.secrets["openrouter"]["api_key"]
-            LLM_MODEL = st.secrets["openrouter"]["model"]
+            params = {}
+            if category == "Umum": params = build_common_query(keywords, time_filter_value, use_condition_filter, use_url_filter)
+            elif category == "Spare Part": params = build_spare_part_query(keywords, time_filter_value, use_condition_filter, use_url_filter)
+            elif category == "Alat Berat": params = build_heavy_equipment_query(alat_type, brand, model, year, time_filter_value, use_condition_filter, use_url_filter)
+            elif category == "Scrap": params = build_scrap_query(scrap_type, unit, time_filter_value)
 
-            if not all([SERPAPI_API_KEY, OPENROUTER_API_KEY, LLM_MODEL]):
-                st.error("Harap konfigurasikan SERPAPI_API_KEY, OPENROUTER_API_KEY, dan LLM_MODEL di Streamlit Secrets!")
-            else:
-                params = {}
-                if category == "Umum":
-                    params = build_common_query(keywords, time_filter_value, use_condition_filter, use_url_filter)
-                elif category == "Spare Part":
-                    params = build_spare_part_query(keywords, time_filter_value, use_condition_filter, use_url_filter)
-                elif category == "Alat Berat":
-                    params = build_heavy_equipment_query(alat_type, brand, model, year, time_filter_value, use_condition_filter, use_url_filter)
-                elif category == "Scrap":
-                    params = build_scrap_query(scrap_type, unit, time_filter_value)
-            
             with st.spinner(f"Menganalisis harga untuk '{product_name_display}'..."):
-                # ...
+                st.info("Langkah 1/3: Mengambil data dari internet...")
                 serpapi_data = search_with_serpapi(params, SERPAPI_API_KEY)
 
                 if serpapi_data:
-                    # ...
+                    st.info("Langkah 2/3: Memfilter & membersihkan data...")
                     context_text = filter_and_extract_text_for_llm(serpapi_data, product_name_display)
-
                     if context_text:
-                        # ...
+                        st.info("Langkah 3/3: Mengirim data ke AI untuk dianalisis...")
                         ai_analysis = analyze_with_llm_non_auto(context_text, product_name_display, OPENROUTER_API_KEY, grade_input)
-
                         if ai_analysis:
-                            # ...
-                            st.session_state.non_auto_submitted = True
-                            st.session_state.non_auto_analysis = ai_analysis
-
-                            # ### MODIFIKASI: Tambahkan log jika AI berhasil merespons
-                            log_payload = {
-                                "tipe_estimasi": "Non-Automotif",
-                                "kategori": category,
-                                "query_pencarian": product_name_display,
-                                "filter_waktu": selected_time_filter,
-                                "filter_kondisi": use_condition_filter,
-                                "filter_situs": use_url_filter,
-                                "grade_dipilih": grade_input if category != "Scrap" else "N/A",
-                                "respon_llm": ai_analysis
-                            }
-                            log_activity_to_drive(log_payload)
+                            st.success("Analisis Selesai!")
+                            st.subheader(f"📝 Analisis AI LEGOAS untuk {product_name_display}")
+                            st.markdown(ai_analysis)
                             
-                            # Tampilkan hasil
-                            st.subheader(f"📝 Analisis AI LEGOAS untuk Harga {product_name_display}")
-                            st.markdown("### Rekomendasi & Analisis AI")
-                            st.write(ai_analysis)
-                            else:
-                                st.error("Analisis Gagal: Tidak menerima respons dari AI.")
-                        else:
-                            st.error("Ekstraksi Teks Gagal: Tidak ada hasil pencarian yang relevan ditemukan setelah filtering.")
-                            st.warning("**Saran:** Coba sederhanakan nama barang Anda, periksa kembali ejaan, atau nonaktifkan filter di sidebar untuk memperluas pencarian.")
-                    else:
-                        st.error("Pengambilan Data Gagal: Tidak menerima data dari SerpAPI.")
+                            # Simpan log setelah analisis berhasil
+                            log_payload = { "tipe_estimasi": "Non-Automotif", "kategori": category, "query_pencarian": product_name_display, "filter_waktu": selected_time_filter, "filter_kondisi": use_condition_filter, "filter_situs": use_url_filter, "grade_dipilih": grade_input if category != 'Scrap' else 'N/A', "respon_llm": ai_analysis }
+                            log_activity_to_drive(log_payload)
+                        else: st.error("Analisis Gagal: Tidak menerima respons dari AI.")
+                    else: st.error("Ekstraksi Teks Gagal: Tidak ada hasil pencarian yang relevan.")
+                else: st.error("Pengambilan Data Gagal: Tidak menerima data dari SerpAPI.")
 
-        # Tampilkan hasil analisis jika sudah ada
-        if st.session_state.get('non_auto_submitted') and st.session_state.get('non_auto_analysis'):
-            st.markdown("---")
-            st.subheader(f"📝 Analisis AI LEGOAS untuk Harga {product_name_display}")
-            st.markdown("### Rekomendasi & Analisis AI")
-            st.write(st.session_state.non_auto_analysis)
+# ==============================================================================
+# LOGIKA EKSEKUSI UTAMA
+# ==============================================================================
 
-    st.markdown("</div>", unsafe_allow_html=True)
-
-# ... (Blok eksekusi utama tetap sama)
 def main():
+    """Fungsi utama untuk menjalankan aplikasi."""
     if not st.session_state.get("is_logged_in", False):
         login_page()
     else:
@@ -800,3 +684,4 @@ def main():
 if __name__ == "__main__":
     main()
 
+# --- Akhir dari Skrip ---
