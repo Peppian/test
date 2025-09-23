@@ -1,9 +1,6 @@
 streamlit
 pandas
 requests
-io
-re
-json
 numpy
 datetime
 pytz
