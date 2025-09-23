@@ -63,12 +63,13 @@ st.markdown("""
 import gspread
 
 # HAPUS fungsi log_activity_to_drive YANG LAMA dan GANTI dengan ini:
+# GANTI LAGI DENGAN VERSI DEBUGGING DETAIL INI
 def log_activity_to_sheet(log_data: dict):
     """
-    Menyimpan log aktivitas sebagai baris baru di Google Spreadsheet yang ditentukan.
+    [DEBUGGING DETAIL] Menyimpan log ke Google Sheet dengan tambahan output
+    untuk memeriksa data dan tipe error.
     """
     try:
-        # Menggunakan kredensial yang sama, tetapi dengan scopes untuk Sheets DAN Drive
         creds_info = st.secrets["gcp_service_account"]
         scopes = [
             'https://www.googleapis.com/auth/spreadsheets',
@@ -77,30 +78,37 @@ def log_activity_to_sheet(log_data: dict):
         creds = Credentials.from_service_account_info(creds_info, scopes=scopes)
         client = gspread.authorize(creds)
 
-        # Buka spreadsheet berdasarkan namanya. Pastikan nama ini sama persis.
         spreadsheet = client.open("Log Aplikasi LEGOAS") 
-        worksheet = spreadsheet.sheet1 # Ambil sheet pertama
+        worksheet = spreadsheet.sheet1 
 
-        # Siapkan baris data yang akan ditambahkan
-        # PENTING: Urutan data di sini harus SAMA PERSIS dengan urutan kolom di Sheet Anda
+        # Siapkan baris data
         new_row = [
             log_data.get('timestamp', ''),
             log_data.get('user', ''),
             log_data.get('tipe_estimasi', ''),
-            # Gabungkan detail query menjadi satu kolom agar rapi
             log_data.get('detail_query', ''),
             log_data.get('grade_dipilih', ''),
-            log_data.get('harga_awal', ''),
-            log_data.get('harga_disesuaikan', ''),
+            str(log_data.get('harga_awal', '')),         # Paksa konversi ke string
+            str(log_data.get('harga_disesuaikan', '')),  # Paksa konversi ke string
             log_data.get('respon_llm', '')
         ]
         
-        # Tambahkan baris baru ke bagian paling bawah sheet
+        # --- LANGKAH DEBUGGING BARU ---
+        # Tampilkan data yang akan dikirim di terminal/konsol
+        print("--- DATA YANG AKAN DIKIRIM KE GOOGLE SHEET ---")
+        print(new_row)
+        print("---------------------------------------------")
+
+        # Kirim data
         worksheet.append_row(new_row)
+        
+        st.success("Log berhasil disimpan ke Google Sheet.")
 
     except Exception as e:
-        # Tampilkan error di UI jika gagal, agar mudah di-debug
-        st.error(f"Gagal menyimpan log ke Google Sheet: {e}")
+        # --- LANGKAH DEBUGGING BARU ---
+        # Tampilkan tipe error dan isi error secara detail
+        st.error(f"Tipe Error yang Sebenarnya: {type(e)}")
+        st.error(f"Isi Error Lengkap: {e}")
 
 # --- Fungsi API OpenRouter ---
 def ask_openrouter(prompt: str) -> str:
@@ -680,6 +688,7 @@ if __name__ == "__main__":
     main()
 
 # --- Akhir dari Skrip ---
+
 
 
 
