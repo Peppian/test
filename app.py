@@ -17,7 +17,7 @@ import pytz
 # --- Impor Library Google API ---
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
+from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload, MediaIoBaseUpload
 
 # ==============================================================================
 # KONFIGURASI APLIKASI
@@ -61,14 +61,13 @@ st.markdown("""
 # FUNGSI-FUNGSI HELPER
 # ==============================================================================
 
-# --- Fungsi Logging ke Google Drive ---
-# GANTI FUNGSI LAMA ANDA DENGAN VERSI DEBUGGING INI
+# GANTI LAGI DENGAN VERSI FINAL DEBUG INI
 def log_activity_to_drive(log_data: dict):
     """
-    [VERSI DEBUGGING] Fungsi ini HANYA akan mencoba membuat file log BARU setiap saat.
-    Nama file akan unik berdasarkan timestamp untuk memastikan tidak ada konflik.
+    [VERSI DEBUG FINAL] Fungsi ini HANYA akan mencoba membuat file log BARU setiap saat.
+    Dengan perbaikan untuk error 'MediaUpload'.
     """
-    st.info("Mencoba menjalankan fungsi logging [DEBUG MODE]...") # Pesan debug di UI
+    st.info("Mencoba menjalankan fungsi logging [DEBUG MODE v2]...")
     try:
         folder_id = st.secrets["logging"]["folder_id"]
         creds_info = st.secrets["gcp_service_account"]
@@ -86,17 +85,20 @@ def log_activity_to_drive(log_data: dict):
         filename = f"log-debug-{timestamp.strftime('%Y-%m-%d_%H-%M-%S')}.json"
         
         # Konversi data log ke format JSON
-        log_content = json.dumps([log_data], indent=4) # Simpan sebagai list berisi 1 item
-        
-        # Siapkan file media untuk diunggah
-        media_body = io.BytesIO(log_content.encode('utf-8'))
+        log_content_bytes = io.BytesIO(json.dumps([log_data], indent=4).encode('utf-8'))
         
         file_metadata = {'name': filename, 'parents': [folder_id]}
         
-        # Eksekusi pembuatan file
+        # --- PERBAIKAN DI SINI ---
+        # "Bungkus" data log kita dengan MediaIoBaseUpload
+        media = MediaIoBaseUpload(log_content_bytes, 
+                                  mimetype='application/json', 
+                                  resumable=True)
+        
+        # Eksekusi pembuatan file dengan menggunakan objek 'media' yang sudah benar
         service.files().create(
             body=file_metadata,
-            media_body=media_body,
+            media_body=media,  # Menggunakan objek media yang sudah dibungkus
             fields='id'
         ).execute()
         
@@ -666,5 +668,6 @@ if __name__ == "__main__":
     main()
 
 # --- Akhir dari Skrip ---
+
 
 
