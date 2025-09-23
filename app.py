@@ -518,8 +518,8 @@ Tugas Anda: Jelaskan secara profesional mengapa harga tersebut wajar, hubungkan 
                     
                     if response and not response.startswith("⚠️"):
                         # Siapkan timestamp dan user sekarang
-                            jakarta_tz = pytz.timezone('Asia/Jakarta')
-                            timestamp = datetime.now(jakarta_tz).isoformat()
+                        jakarta_tz = pytz.timezone('Asia/Jakarta')
+                        timestamp = datetime.now(jakarta_tz).isoformat()
                         user = st.session_state.get('username', 'unknown')
     
                         # Gabungkan detail pencarian menjadi satu string
@@ -678,6 +678,7 @@ if __name__ == "__main__":
     main()
 
 # --- Akhir dari Skrip ---
+
 
 
 
