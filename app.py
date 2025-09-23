@@ -13,6 +13,7 @@ import json
 import numpy as np
 from datetime import datetime
 import pytz
+import gspread
 
 # --- Impor Library Google API ---
 from google.oauth2.service_account import Credentials
@@ -22,10 +23,6 @@ from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload, MediaIoBa
 # ==============================================================================
 # KONFIGURASI APLIKASI
 # ==============================================================================
-
-# --- Konfigurasi Login ---
-USERNAME = "legoas"
-PASSWORD = "admin"
 
 # --- Kamus untuk Faktor Grade ---
 GRADE_FACTORS = {
@@ -385,6 +382,7 @@ def analyze_with_llm_non_auto(context_text, product_name, api_key, grade):
 # BAGIAN 2: HALAMAN APLIKASI DAN LOGIKA EKSEKUSI UTAMA
 # ==============================================================================
 
+# GANTI FUNGSI LOGIN LAMA ANDA DENGAN VERSI BARU INI
 def login_page():
     """Menampilkan halaman login untuk pengguna."""
     st.markdown('<div class="login-container">', unsafe_allow_html=True)
@@ -395,7 +393,11 @@ def login_page():
         password = st.text_input("Password", type="password", placeholder="Masukkan password Anda")
         
         if st.form_submit_button("Masuk", use_container_width=True):
-            if username == USERNAME and password == PASSWORD:
+            # Mengambil daftar pengguna dari st.secrets
+            users = st.secrets["users"]
+            
+            # Memeriksa apakah username ada dan password-nya cocok
+            if username in users and users[username] == password:
                 st.session_state.is_logged_in = True
                 st.session_state.username = username
                 st.rerun()
@@ -678,6 +680,7 @@ if __name__ == "__main__":
     main()
 
 # --- Akhir dari Skrip ---
+
 
 
 
