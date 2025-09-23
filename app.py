@@ -177,6 +177,128 @@ def reset_prediction_state():
     ]
     for key in keys_to_reset:
         st.session_state.pop(key, None)
+        
+# ==============================================================================
+# FUNGSI LOGGING KE GOOGLE DRIVE
+# ==============================================================================
+
+def setup_logging_service():
+    """Setup service untuk Google Drive logging"""
+    try:
+        creds_info = st.secrets["gcp_service_account"]
+        creds = Credentials.from_service_account_info(creds_info)
+        service = build('drive', 'v3', credentials=creds)
+        return service
+    except Exception as e:
+        st.error(f"Gagal setup logging service: {e}")
+        return None
+
+def create_log_entry(activity_type, details, username="legoas"):
+    """Membuat entri log"""
+    import datetime
+    return {
+        "timestamp": datetime.datetime.now().isoformat(),
+        "username": username,
+        "activity_type": activity_type,
+        "details": details,
+        "ip_address": get_client_ip()  # Fungsi untuk mendapatkan IP client
+    }
+
+def get_client_ip():
+    """Mendapatkan IP address client (hanya bekerja di beberapa environment)"""
+    try:
+        import streamlit as st
+        # Cara alternatif mendapatkan IP (mungkin tidak bekerja di semua deployment)
+        ctx = st.runtime.scriptrunner.get_script_run_ctx()
+        if ctx and hasattr(ctx, 'request'):
+            return ctx.request.remote_ip
+        return "Unknown"
+    except:
+        return "Unknown"
+
+def save_log_to_drive(log_entry, folder_id=None):
+    """Menyimpan log ke Google Drive"""
+    try:
+        service = setup_logging_service()
+        if not service:
+            return False
+        
+        # Nama file log berdasarkan tanggal
+        import datetime
+        today = datetime.datetime.now().strftime("%Y-%m-%d")
+        log_filename = f"legoas_activity_log_{today}.json"
+        
+        # Cari file log hari ini
+        query = f"name='{log_filename}' and trashed=false"
+        if folder_id:
+            query += f" and '{folder_id}' in parents"
+        
+        results = service.files().list(q=query, fields="files(id, name)").execute()
+        files = results.get('files', [])
+        
+        if files:
+            # File sudah ada, update isinya
+            file_id = files[0]['id']
+            # Download file existing
+            request = service.files().get_media(fileId=file_id)
+            file_stream = io.BytesIO()
+            downloader = MediaIoBaseDownload(file_stream, request)
+            done = False
+            while not done:
+                status, done = downloader.next_chunk()
+            
+            file_stream.seek(0)
+            existing_content = file_stream.read().decode('utf-8')
+            
+            # Parse existing logs
+            try:
+                existing_logs = json.loads(existing_content)
+            except:
+                existing_logs = []
+            
+            # Tambah log baru
+            existing_logs.append(log_entry)
+            
+            # Upload kembali
+            updated_content = json.dumps(existing_logs, indent=2, ensure_ascii=False)
+            media_body = MediaIoBaseUpload(io.BytesIO(updated_content.encode('utf-8')), 
+                                         mimetype='application/json')
+            service.files().update(fileId=file_id, media_body=media_body).execute()
+            
+        else:
+            # Buat file baru
+            file_metadata = {
+                'name': log_filename,
+                'mimeType': 'application/json'
+            }
+            if folder_id:
+                file_metadata['parents'] = [folder_id]
+            
+            logs_content = json.dumps([log_entry], indent=2, ensure_ascii=False)
+            media_body = MediaIoBaseUpload(io.BytesIO(logs_content.encode('utf-8')), 
+                                         mimetype='application/json')
+            service.files().create(body=file_metadata, media_body=media_body).execute()
+        
+        return True
+        
+    except Exception as e:
+        print(f"Error saving log to Drive: {e}")  # Print error untuk debugging
+        return False
+
+def log_activity(activity_type, details, username="legoas"):
+    """Fungsi utama untuk logging aktivitas"""
+    log_entry = create_log_entry(activity_type, details, username)
+    
+    # Simpan ke Google Drive (gunakan folder ID dari secrets jika ada)
+    folder_id = st.secrets.get("logging", {}).get("folder_id")
+    success = save_log_to_drive(log_entry, folder_id)
+    
+    # Juga simpan ke session state untuk cache lokal
+    if 'activity_logs' not in st.session_state:
+        st.session_state.activity_logs = []
+    st.session_state.activity_logs.append(log_entry)
+    
+    return success
 
 # ==============================================================================
 # FUNGSI-FUNGSI UNTUK NON-AUTOMOTIF
@@ -356,8 +478,12 @@ def login_page():
         if st.form_submit_button("Masuk", use_container_width=True):
             if username == USERNAME and password == PASSWORD:
                 st.session_state.is_logged_in = True
+                # LOG ACTIVITY
+                log_activity("LOGIN", f"User {username} berhasil login")
                 st.rerun()
             else:
+                # LOG FAILED ATTEMPT
+                log_activity("LOGIN_FAILED", f"Percobaan login gagal dengan username: {username}")
                 st.markdown('<p class="error-message">Username atau password salah</p>', unsafe_allow_html=True)
     st.markdown('<div class="login-footer">Sistem Estimasi Harga LEGOAS<br>© 2025</div></div>', unsafe_allow_html=True)
 
@@ -403,8 +529,10 @@ def main_page():
         st.markdown("---")
         st.markdown("<div style='flex-grow: 1;'></div>", unsafe_allow_html=True)
         
-        # Tombol keluar di bagian paling bawah sidebar
+        # Di dalam main_page(), modifikasi tombol keluar:
         if st.button("🔒 Keluar", use_container_width=True):
+            # LOG ACTIVITY
+            log_activity("LOGOUT", "User keluar dari sistem")
             st.session_state.is_logged_in = False
             st.rerun()
 
@@ -437,16 +565,29 @@ def main_page():
             year_options = ["-"] + (sorted(df_source[(df_source["name"] == brand) & (df_source["model"] == model) & (df_source["varian"] == varian)]["tahun"].unique(), reverse=True))
             year = st.selectbox("Tahun", [str(y) for y in year_options], key="car_year", on_change=reset_prediction_state)
 
+        # Di bagian estimasi mobil, setelah tombol "Lihat Estimasi Harga"
         if st.button("🔍 Lihat Estimasi Harga", use_container_width=True, key="car_estimate_button"):
             if "-" in [brand, model, varian, year]:
                 st.warning("⚠️ Mohon lengkapi semua pilihan terlebih dahulu.")
             else:
                 mask = ( (df_source["name"] == brand) & (df_source["model"] == model) & (df_source["varian"] == varian) & (df_source["tahun"] == int(year)) )
                 results = df_source[mask]
-                
+        
                 if not results.empty:
                     st.session_state.prediction_made_car = True
                     st.session_state.selected_data_car = results.iloc[0]
+            
+                    # LOG ACTIVITY
+                    selected_data = results.iloc[0]
+                    log_details = {
+                        "brand": brand,
+                        "model": model, 
+                        "varian": varian,
+                        "tahun": year,
+                        "harga_estimasi": selected_data.get("output", 0)
+                    }
+                    log_activity("ESTIMASI_MOBIL", log_details)
+            
                     if len(results) > 1:
                          st.warning(f"⚠️ Ditemukan {len(results)} data duplikat. Menampilkan hasil pertama.")
                 else:
@@ -508,21 +649,33 @@ def main_page():
             year_options = ["-"] + (sorted(df_source[(df_source["brand"] == brand) & (df_source["variant"] == variant)]["year"].unique(), reverse=True))
             year = st.selectbox("Tahun", [str(y) for y in year_options], key="motor_year", on_change=reset_prediction_state)
 
-            if st.button("🔍 Lihat Estimasi Harga", use_container_width=True, key="motor_estimate_button"):
-                if "-" in [brand, variant, year]:
-                    st.warning("⚠️ Mohon lengkapi semua pilihan terlebih dahulu.")
+        # Di bagian estimasi motor, setelah tombol "Lihat Estimasi Harga"
+        if st.button("🔍 Lihat Estimasi Harga", use_container_width=True, key="motor_estimate_button"):
+            if "-" in [brand, variant, year]:
+                st.warning("⚠️ Mohon lengkapi semua pilihan terlebih dahulu.")
                 else:
-                    mask = ( (df_source["brand"] == brand) & (df_source["variant"] == variant) & (df_source["year"] == int(year)) )
-                    results = df_source[mask]
-                    
-                    if not results.empty:
-                        st.session_state.prediction_made_motor = True
-                        st.session_state.selected_data_motor = results.iloc[0]
-                        if len(results) > 1:
-                            st.warning(f"⚠️ Ditemukan {len(results)} data duplikat. Menampilkan hasil pertama.")
-                    else:
-                        st.error("❌ Kombinasi tersebut tidak ditemukan di dataset.")
-                        reset_prediction_state()
+                mask = ( (df_source["brand"] == brand) & (df_source["variant"] == variant) & (df_source["year"] == int(year)) )
+                results = df_source[mask]
+        
+                if not results.empty:
+                    st.session_state.prediction_made_motor = True
+                    st.session_state.selected_data_motor = results.iloc[0]
+            
+                    # LOG ACTIVITY
+                    selected_data = results.iloc[0]
+                    log_details = {
+                        "brand": brand,
+                        "variant": variant,
+                        "tahun": year,
+                        "harga_estimasi": selected_data.get("output", 0)
+                    }
+                    log_activity("ESTIMASI_MOTOR", log_details)
+            
+                    if len(results) > 1:
+                        st.warning(f"⚠️ Ditemukan {len(results)} data duplikat. Menampilkan hasil pertama.")
+                else:
+                    st.error("❌ Kombinasi tersebut tidak ditemukan di dataset.")
+                    reset_prediction_state()
 
             if st.session_state.get('prediction_made_motor'):
                 selected_data = st.session_state.selected_data_motor
@@ -602,7 +755,7 @@ def main_page():
 
             # Langkah 3: Tombol Submit
             submitted = st.form_submit_button("Analisis Harga Sekarang!")
-
+            
         # Proses analisis non-automotif
         if submitted:
             SERPAPI_API_KEY = st.secrets["openrouter"]["serpapi"]
@@ -640,6 +793,15 @@ def main_page():
                                 st.balloons()
                                 st.success("Analisis Harga Selesai!")
                                 
+                                # LOG ACTIVITY
+                                log_details = {
+                                    "kategori": category,
+                                    "produk": product_name_display,
+                                    "grade": grade_input if category != "Scrap" else "N/A",
+                                    "filter_waktu": selected_time_filter
+                                    }
+                                    log_activity("ESTIMASI_NON_AUTOMOTIF", log_details)
+            
                                 st.subheader(f"📝 Analisis AI LEGOAS untuk Harga {product_name_display}")
                                 st.markdown("### Rekomendasi & Analisis AI")
                                 st.write(ai_analysis)
@@ -680,5 +842,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
