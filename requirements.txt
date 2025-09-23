@@ -1,6 +1,16 @@
 streamlit
 pandas
 requests
+base64
+io
+re
+json
+numpy
+datetime
+pytz
 google-api-python-client
 google-auth-httplib2
 google-auth-oauthlib
+google.oauth2.service_account
+googleapiclient.discovery
+googleapiclient.http
