@@ -29,7 +29,7 @@ PASSWORD = "admin"
 
 # --- ID File JSON di Google Drive ---
 # DIPINDAHKAN ke dalam fungsi untuk akses yang lebih aman via st.secrets
-GOOGLE_DRIVE_FILE_ID = st.secrets["logging"]["folder_id"] # Ini untuk data mobil, bukan logging
+#GOOGLE_DRIVE_FILE_ID = st.secrets["logging"]["folder_id"] # Ini untuk data mobil, bukan logging
 
 # --- Kamus untuk faktor Grade ---
 GRADE_FACTORS = {
@@ -110,7 +110,43 @@ def load_data_from_drive(file_id):
     except Exception as e:
         st.error(f"Gagal memuat atau memproses data dari Google Drive: {e}")
         return pd.DataFrame()
+@st.cache_data
+def load_local_data(path):
+    """Memuat data motor dari file lokal dengan pembersihan data."""
+    try:
+        if path.endswith('.csv'):
+            df = pd.read_csv(path)
+            if df.empty:
+                st.error("File CSV ditemukan tetapi kosong.")
+                return pd.DataFrame()
+                
+            df.columns = df.columns.str.strip().str.lower()
+            
+            string_cols_motor = ['brand', 'variant']
+            for col in string_cols_motor:
+                if col in df.columns:
+                    df[col] = df[col].astype(str).str.strip()
 
+            numeric_cols_csv = ['output', 'residu', 'depresiasi_residu', 'estimasi_1', 'year']
+            for col in numeric_cols_csv:
+                if col in df.columns:
+                    # Hapus juga koma jika ada di data motor
+                    df[col] = df[col].astype(str).str.replace(',', '', regex=False)
+                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            
+            if 'year' in df.columns:
+                df['year'] = df['year'].astype(int)
+
+            return df
+        else:
+            st.error(f"Format file lokal tidak didukung: {path}")
+            return pd.DataFrame()
+    except FileNotFoundError:
+        st.error(f"File data motor tidak ditemukan di path: {path}")
+        return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Error memuat file data motor: {e}")
+        return pd.DataFrame()
 # ... (Fungsi-fungsi lain yang tidak berubah seperti load_local_data, ask_openrouter, format_rupiah, dll. tetap sama) ...
 # (Saya akan menyertakan semua fungsi di blok kode akhir)
 
@@ -303,14 +339,16 @@ def display_vehicle_estimator(vehicle_type, df, key_prefix):
 
 
 def main_page():
-    # Load data sekali saat halaman utama dimuat
     if 'df_mobil' not in st.session_state:
-        gdrive_file_id = st.secrets.get("gcp", {}).get("mobil_data_id") # Ambil dari secrets
-        if gdrive_file_id:
-            st.session_state.df_mobil = load_data_from_drive(gdrive_file_id)
+        # --- INI PERBAIKANNYA ---
+        # Mengambil ID file mobil dari seksi [data_sources] di secrets
+        mobil_data_file_id = st.secrets.get("data_sources", {}).get("mobil_data_id")
+        
+        if mobil_data_file_id:
+            st.session_state.df_mobil = load_data_from_drive(mobil_data_file_id)
         else:
-            st.error("ID file data mobil tidak ditemukan di Streamlit Secrets.")
-            st.session_state.df_mobil = pd.DataFrame()
+            st.error("⚠️ Konfigurasi 'mobil_data_id' tidak ditemukan di Streamlit Secrets.")
+            st.session_state.df_mobil = pd.DataFrame() # Buat dataframe kosong jika gagal
 
     if 'df_motor' not in st.session_state:
         st.session_state.df_motor = load_local_data("dt/mtr.csv")
@@ -365,4 +403,5 @@ if __name__ == "__main__":
     # Inisialisasi service GDrive saat aplikasi pertama kali dijalankan
     get_gdrive_service()
     main()
+
 
