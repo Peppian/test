@@ -78,7 +78,7 @@ def log_activity_to_sheet(log_data: dict):
         creds = Credentials.from_service_account_info(creds_info, scopes=scopes)
         client = gspread.authorize(creds)
 
-        spreadsheet = client.open("Log Aplikasi LEGOAS") 
+        spreadsheet = client.open("log_st") 
         worksheet = spreadsheet.sheet1 
 
         # Siapkan baris data
@@ -688,6 +688,7 @@ if __name__ == "__main__":
     main()
 
 # --- Akhir dari Skrip ---
+
 
 
 
