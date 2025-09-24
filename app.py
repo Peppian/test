@@ -601,9 +601,22 @@ Tugas Anda: Jelaskan secara profesional mengapa harga tersebut wajar, hubungkan 
                         response = ask_openrouter(prompt)
                         st.session_state.ai_response_motor = response
 
-                        if response and not response.startswith("⚠️"):
-                            log_payload = { "tipe_estimasi": "Motor", "brand": selected_data['brand'], "varian": selected_data['variant'], "tahun": int(selected_data['year']), "grade_dipilih": grade_selection, "harga_awal": initial_price, "harga_disesuaikan": adjusted_price, "respon_llm": response }
-                            log_activity_to_drive(log_payload)
+                    if response and not response.startswith("⚠️"):
+                        # Siapkan timestamp dan user
+                        jakarta_tz = pytz.timezone('Asia/Jakarta')
+                        timestamp = datetime.now(jakarta_tz).isoformat()
+                        user = st.session_state.get('username', 'unknown')
+                        
+                        # Gabungkan detail pencarian menjadi satu string
+                        detail_query = f"Motor: {selected_data['brand']} {selected_data['variant']} ({int(selected_data['year'])})"
+
+                        log_payload = {
+                            "timestamp": timestamp, "user": user, "tipe_estimasi": "Motor",
+                            "detail_query": detail_query, "grade_dipilih": grade_selection,
+                            "harga_awal": initial_price, "harga_disesuaikan": adjusted_price,
+                            "respon_llm": response
+                        }
+                        log_activity_to_sheet(log_payload) # <-- Panggil fungsi yang benar
 
                 if st.session_state.get('ai_response_motor'):
                     st.markdown("---")
@@ -661,14 +674,33 @@ Tugas Anda: Jelaskan secara profesional mengapa harga tersebut wajar, hubungkan 
                     if context_text:
                         st.info("Langkah 3/3: Mengirim data ke AI untuk dianalisis...")
                         ai_analysis = analyze_with_llm_non_auto(context_text, product_name_display, OPENROUTER_API_KEY, grade_input)
+                        
                         if ai_analysis:
                             st.success("Analisis Selesai!")
+                            
+                            # Siapkan timestamp dan user
+                            jakarta_tz = pytz.timezone('Asia/Jakarta')
+                            timestamp = datetime.now(jakarta_tz).isoformat()
+                            user = st.session_state.get('username', 'unknown')
+                            
+                            # Siapkan detail query
+                            detail_query = f"{category}: {product_name_display}"
+
+                            log_payload = {
+                                "timestamp": timestamp,
+                                "user": user,
+                                "tipe_estimasi": "Non-Automotif",
+                                "detail_query": detail_query,
+                                "grade_dipilih": grade_input if category != 'Scrap' else 'N/A',
+                                "harga_awal": 'N/A',         # Tidak ada harga awal untuk non-otomotif
+                                "harga_disesuaikan": 'N/A', # Tidak ada harga akhir untuk non-otomotif
+                                "respon_llm": ai_analysis
+                            }
+                            log_activity_to_sheet(log_payload) # Panggil fungsi yang benar
+                            
+                            # Tampilkan hasil ke pengguna
                             st.subheader(f"📝 Analisis AI LEGOAS untuk {product_name_display}")
                             st.markdown(ai_analysis)
-                            
-                            # Simpan log setelah analisis berhasil
-                            log_payload = { "tipe_estimasi": "Non-Automotif", "kategori": category, "query_pencarian": product_name_display, "filter_waktu": selected_time_filter, "filter_kondisi": use_condition_filter, "filter_situs": use_url_filter, "grade_dipilih": grade_input if category != 'Scrap' else 'N/A', "respon_llm": ai_analysis }
-                            log_activity_to_drive(log_payload)
                         else: st.error("Analisis Gagal: Tidak menerima respons dari AI.")
                     else: st.error("Ekstraksi Teks Gagal: Tidak ada hasil pencarian yang relevan.")
                 else: st.error("Pengambilan Data Gagal: Tidak menerima data dari SerpAPI.")
@@ -688,6 +720,7 @@ if __name__ == "__main__":
     main()
 
 # --- Akhir dari Skrip ---
+
 
 
 
