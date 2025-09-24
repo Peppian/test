@@ -102,7 +102,7 @@ def log_activity_to_sheet(log_data: dict):
         # Kirim data
         worksheet.append_row(new_row)
         
-        st.success("Log berhasil disimpan ke Google Sheet.")
+        #st.success("Log berhasil disimpan ke Google Sheet.")
 
     except Exception as e:
         # --- LANGKAH DEBUGGING BARU ---
@@ -391,10 +391,13 @@ def analyze_with_llm_non_auto(context_text, product_name, api_key, grade):
 # ==============================================================================
 
 # GANTI FUNGSI LOGIN LAMA ANDA DENGAN VERSI BARU INI
+# GANTI SELURUH FUNGSI login_page ANDA DENGAN INI
+
 def login_page():
     """Menampilkan halaman login untuk pengguna."""
-    st.markdown('<div class="login-container">', unsafe_allow_html=True)
-    st.markdown('<div class="login-icon">🔒</div><h2 class="login-title">Silakan Login Terlebih Dahulu</h2>', unsafe_allow_html=True)
+    
+    # GABUNGKAN KEMBALI DUA BARIS INI MENJADI SATU
+    st.markdown('<div class="login-container"><div class="login-icon">🔒</div><h2 class="login-title">Silakan Login Terlebih Dahulu</h2>', unsafe_allow_html=True)
     
     with st.form("login_form"):
         username = st.text_input("Username", placeholder="Masukkan username Anda")
@@ -410,8 +413,10 @@ def login_page():
                 st.session_state.username = username
                 st.rerun()
             else:
+                # Pesan error ini sekarang akan muncul di dalam 'card' juga
                 st.markdown('<p class="error-message">Username atau password salah</p>', unsafe_allow_html=True)
-                
+    
+    # Baris ini untuk footer dan tag penutup </div> dari login-container
     st.markdown('<div class="login-footer">Sistem Estimasi Harga LEGOAS<br>© 2025</div></div>', unsafe_allow_html=True)
 
 
@@ -720,6 +725,7 @@ if __name__ == "__main__":
     main()
 
 # --- Akhir dari Skrip ---
+
 
 
 
