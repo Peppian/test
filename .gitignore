@@ -1,0 +1,35 @@
+# ==========================================================
+# .gitignore untuk Proyek Streamlit di Server
+# ==========================================================
+
+# --- File Kredensial dan Rahasia (SANGAT PENTING!) ---
+# Jangan pernah mengirim file-file ini ke GitHub.
+.env
+service-account.json
+private_key.txt
+
+# --- Skrip Helper Sementara ---
+# Skrip ini hanya digunakan sekali untuk setup, tidak perlu disimpan di repo.
+generate_json.py
+create_sa_file.py
+
+# --- Folder Virtual Environment ---
+# Folder ini dibuat ulang di setiap mesin, jangan pernah di-commit.
+env/
+venv/
+
+# --- File & Folder Bawaan Python ---
+# Ini adalah file cache yang dibuat otomatis oleh Python.
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# --- File Data (Opsional) ---
+# Jika file di dalam folder 'dt/' (seperti mtr.csv) berukuran besar atau bersifat rahasia,
+# sebaiknya jangan disimpan di GitHub. Aktifkan baris di bawah dengan menghapus tanda #.
+dt/
+
+# --- File Log ---
+# Jika aplikasi Anda menghasilkan file log.
+*.log
